@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>Cricket</string>
+    <key>CFBundleIdentifier</key>
+    <string>wm6h.Cricket-mac</string>
+    <key>CFBundleName</key>
+    <string>CricketMac</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>26.0</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Cricket needs Bluetooth access to connect to your environmental sensors (Arduino or RuuviTag) for hyperlocal temperature and humidity monitoring.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>Cricket connects to BLE environmental sensors to provide hyperlocal climate data.</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2025 Cricket. All rights reserved.</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+    <key>NSRequiresAquaSystemAppearance</key>
+    <false/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <key>NSAppShortcutsEnabled</key>
+    <true/>
+    <key>NSAppIntentsUIExtensionEnabled</key>
+    <true/>
+</dict>
+</plist>

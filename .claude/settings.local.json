@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm:*)",
+      "Bash(/Applications/Xcode-beta.app/Contents/Developer/usr/bin/xcodebuild -version)",
+      "Bash(find:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(swift:*)",
+      "Bash(xcrun swiftc:*)",
+      "Bash(./DemetorMac --help)",
+      "Bash(cp:*)",
+      "Bash(open:*)",
+      "Bash(pkill:*)",
+      "Bash(timeout:*)",
+      "Bash(ls:*)"
+    ],
+    "deny": []
+  }
+}
