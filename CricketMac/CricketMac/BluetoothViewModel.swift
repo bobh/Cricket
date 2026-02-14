@@ -102,6 +102,44 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
             self.lastUpdated = nil
         }
     }
+
+    // MARK: - BLE Cache Management
+
+    /// Clears BLE cache and restarts scanning
+    /// Useful during development when Arduino firmware changes
+    func clearBLECache() {
+        // Disconnect current peripheral if connected
+        if let peripheral = discoveredPeripheral {
+            centralManager.cancelPeripheralConnection(peripheral)
+        }
+
+        // Clear stored peripheral reference
+        discoveredPeripheral = nil
+
+        // Clear characteristic references
+        temperatureCharacteristic = nil
+        humidityCharacteristic = nil
+
+        // Clear cached peripheral data from UserDefaults
+        let defaults = UserDefaults.standard
+        let keys = defaults.dictionaryRepresentation().keys
+
+        for key in keys where key.hasPrefix("lastSeen_") || key.hasPrefix("fw_version_") {
+            defaults.removeObject(forKey: key)
+        }
+
+        // Reset UI state
+        DispatchQueue.main.async {
+            self.temperature = "--"
+            self.humidity = "--"
+            self.connectionStatus = "Cache cleared - Restarting scan..."
+        }
+
+        // Restart scanning after brief delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.startScanning()
+        }
+    }
     
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {

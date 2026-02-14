@@ -133,9 +133,10 @@ struct ContentView: View {
         } detail: {
             // Main Content - Switch between Arduino BLE and RuuviTag
             if showSettings {
-                Text("Sensor Settings")
-                    .font(.headline)
-                    .padding()
+                SettingsView(
+                    sensorSource: $sensorSource,
+                    bluetoothViewModel: bluetoothViewModel
+                )
             } else {
                 DashboardView(
                     sensorSource: sensorSource,

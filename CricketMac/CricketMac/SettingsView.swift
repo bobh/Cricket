@@ -3,7 +3,8 @@ import AppKit
 
 struct SettingsView: View {
     @Binding var sensorSource: String
-    
+    @ObservedObject var bluetoothViewModel: BluetoothViewModel
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -231,6 +232,54 @@ struct SettingsView: View {
                     }
                 }
                 
+                // Developer Tools
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Image(systemName: "wrench.and.screwdriver.fill")
+                            .foregroundColor(DesignColor.brandBlue)
+                        Text("Developer Tools")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        Spacer()
+                    }
+
+                    Button(action: {
+                        bluetoothViewModel.clearBLECache()
+                    }) {
+                        HStack(spacing: 16) {
+                            Image(systemName: "trash.fill")
+                                .font(.title2)
+                                .foregroundColor(DesignColor.brandOrange)
+                                .frame(width: 32)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Clear BLE Cache")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+
+                                Text("Clear cached Bluetooth data and restart scanning. Useful after Arduino firmware updates.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.leading)
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(DesignColor.brandOrange)
+                        }
+                        .padding()
+                        .background(DesignColor.brandOrange.opacity(0.1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(DesignColor.brandOrange.opacity(0.3), lineWidth: 1)
+                        )
+                        .cornerRadius(12)
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 // About Section
                 VStack(alignment: .leading, spacing: 12) {
                     Text("About Hyperlocal Monitoring")
