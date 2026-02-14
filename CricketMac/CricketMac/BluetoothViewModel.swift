@@ -26,6 +26,10 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
     private let temperatureCharacteristicUUID = CBUUID(string: "78B20AF1-E597-40C1-A69C-304205B7E099")
     private let humidityCharacteristicUUID = CBUUID(string: "0BA15AA1-A805-4205-BC82-AF2E4A9364C5")
 
+    // Stored characteristic references (avoid repeated UUID searches)
+    private var temperatureCharacteristic: CBCharacteristic?
+    private var humidityCharacteristic: CBCharacteristic?
+
     override init() {
         super.init()
         centralManager = CBCentralManager(delegate: self, queue: nil)
@@ -100,11 +104,37 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
     }
     
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        if central.state == .poweredOn {
+        switch central.state {
+        case .poweredOn:
             connectionStatus = "Scanning for Arduino sensor..."
-            centralManager.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
-        } else {
-            connectionStatus = "Bluetooth not available"
+            centralManager.scanForPeripherals(
+                withServices: [environmentalSensingServiceUUID],
+                options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+            )
+
+        case .poweredOff:
+            connectionStatus = "Bluetooth is off - Enable in System Settings"
+            temperature = "--"
+            humidity = "--"
+
+        case .unauthorized:
+            connectionStatus = "Bluetooth access denied - Check Privacy settings"
+            temperature = "--"
+            humidity = "--"
+
+        case .unsupported:
+            connectionStatus = "This Mac doesn't support Bluetooth Low Energy"
+            temperature = "--"
+            humidity = "--"
+
+        case .resetting:
+            connectionStatus = "Bluetooth resetting..."
+
+        case .unknown:
+            connectionStatus = "Bluetooth state unknown - waiting..."
+
+        @unknown default:
+            connectionStatus = "Unexpected Bluetooth state"
         }
     }
     
@@ -126,7 +156,10 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         connectionStatus = "Disconnected"
-        centralManager.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
+        centralManager.scanForPeripherals(
+            withServices: [environmentalSensingServiceUUID],
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+        )
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -160,7 +193,12 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
         }
 
         for characteristic in characteristics {
-            if characteristic.uuid == temperatureCharacteristicUUID || characteristic.uuid == humidityCharacteristicUUID {
+            if characteristic.uuid == temperatureCharacteristicUUID {
+                temperatureCharacteristic = characteristic  // Store reference
+                peripheral.readValue(for: characteristic)
+                peripheral.setNotifyValue(true, for: characteristic)
+            } else if characteristic.uuid == humidityCharacteristicUUID {
+                humidityCharacteristic = characteristic  // Store reference
                 peripheral.readValue(for: characteristic)
                 peripheral.setNotifyValue(true, for: characteristic)
             }
