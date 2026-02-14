@@ -34,10 +34,23 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
     private var writeQueue: [Data] = []
     private var isReadyToWrite: Bool = true
 
+    // Background execution support
+    private var heartbeatTimer: Timer?
+    private let foregroundHeartbeatInterval: TimeInterval = 20.0  // 20 seconds
+    private let backgroundHeartbeatInterval: TimeInterval = 60.0   // 60 seconds
+    private var isInBackground: Bool = false
+
     override init() {
         super.init()
         centralManager = CBCentralManager(delegate: self, queue: nil)
         loadStoredValues()
+    }
+
+    deinit {
+        stopHeartbeat()
+        if let peripheral = discoveredPeripheral {
+            centralManager.cancelPeripheralConnection(peripheral)
+        }
     }
     
     private func loadStoredValues() {
@@ -145,6 +158,101 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
         }
     }
 
+    // MARK: - Background Execution Support
+
+    /// Save peripheral state for restoration after app relaunch
+    private func preservePeripheralState() {
+        guard let peripheral = discoveredPeripheral else { return }
+
+        UserDefaults.standard.set(
+            peripheral.identifier.uuidString,
+            forKey: "lastConnectedPeripheralUUID"
+        )
+        print("💾 Saved peripheral UUID for restoration")
+    }
+
+    /// Restore connection to previously connected peripheral
+    func restorePeripheralConnection() {
+        guard let uuidString = UserDefaults.standard.string(forKey: "lastConnectedPeripheralUUID"),
+              let uuid = UUID(uuidString: uuidString) else {
+            print("ℹ️ No saved peripheral to restore")
+            return
+        }
+
+        // Retrieve peripheral by identifier
+        let peripherals = centralManager.retrievePeripherals(withIdentifiers: [uuid])
+
+        if let peripheral = peripherals.first {
+            print("🔄 Restoring connection to saved peripheral")
+            self.discoveredPeripheral = peripheral
+            peripheral.delegate = self
+            centralManager.connect(peripheral, options: nil)
+            connectionStatus = "Reconnecting to Arduino..."
+        } else {
+            print("⚠️ Saved peripheral not found, starting fresh scan")
+            startScanning()
+        }
+    }
+
+    /// Start heartbeat to prevent 30-second auto-disconnect
+    func startHeartbeat() {
+        stopHeartbeat()
+
+        let interval = isInBackground ? backgroundHeartbeatInterval : foregroundHeartbeatInterval
+
+        heartbeatTimer = Timer.scheduledTimer(
+            withTimeInterval: interval,
+            repeats: true
+        ) { [weak self] _ in
+            self?.sendHeartbeat()
+        }
+
+        print("💓 Heartbeat started (\(Int(interval))s interval)")
+    }
+
+    /// Stop heartbeat timer
+    func stopHeartbeat() {
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
+    }
+
+    /// Send heartbeat to keep connection alive
+    private func sendHeartbeat() {
+        guard let peripheral = discoveredPeripheral,
+              let characteristic = temperatureCharacteristic else {
+            return
+        }
+
+        // Simple read to keep connection alive
+        peripheral.readValue(for: characteristic)
+        print("💓 Heartbeat sent")
+    }
+
+    /// Adjust heartbeat for background operation
+    func applicationDidEnterBackground() {
+        isInBackground = true
+        print("🌙 App entered background - adjusting heartbeat")
+
+        // Restart heartbeat with background interval
+        if heartbeatTimer != nil {
+            startHeartbeat()
+        }
+
+        // Save state for restoration
+        preservePeripheralState()
+    }
+
+    /// Adjust heartbeat for foreground operation
+    func applicationWillEnterForeground() {
+        isInBackground = false
+        print("☀️ App entered foreground - adjusting heartbeat")
+
+        // Restart heartbeat with foreground interval
+        if heartbeatTimer != nil {
+            startHeartbeat()
+        }
+    }
+
     // MARK: - Write Flow Control
 
     /// Write data to peripheral with proper flow control
@@ -189,10 +297,17 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
         switch central.state {
         case .poweredOn:
             connectionStatus = "Scanning for Arduino sensor..."
-            centralManager.scanForPeripherals(
-                withServices: [environmentalSensingServiceUUID],
-                options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
-            )
+
+            // Try to restore previous connection first
+            if UserDefaults.standard.string(forKey: "lastConnectedPeripheralUUID") != nil {
+                restorePeripheralConnection()
+            } else {
+                // No saved peripheral, start fresh scan
+                centralManager.scanForPeripherals(
+                    withServices: [environmentalSensingServiceUUID],
+                    options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+                )
+            }
 
         case .poweredOff:
             connectionStatus = "Bluetooth is off - Enable in System Settings"
@@ -234,10 +349,25 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         connectionStatus = "Connected to Arduino"
         peripheral.discoverServices(nil)
+
+        // Start heartbeat to prevent 30-second auto-disconnect
+        startHeartbeat()
+
+        // Save state for restoration
+        preservePeripheralState()
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        connectionStatus = "Disconnected"
+        // Stop heartbeat
+        stopHeartbeat()
+
+        if let error = error {
+            connectionStatus = "Disconnected: \(error.localizedDescription)"
+        } else {
+            connectionStatus = "Disconnected"
+        }
+
+        // Auto-reconnect: restart scanning
         centralManager.scanForPeripherals(
             withServices: [environmentalSensingServiceUUID],
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]

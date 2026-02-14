@@ -10,6 +10,8 @@ import AppIntents
 
 @main
 struct CricketMacApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -17,6 +19,20 @@ struct CricketMacApp: App {
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
+    }
+}
+
+// App Delegate for background/foreground notifications
+class AppDelegate: NSObject, NSApplicationDelegate {
+    // Will be set by ContentView when ViewModels are created
+    static var bluetoothViewModel: BluetoothViewModel?
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        AppDelegate.bluetoothViewModel?.applicationWillEnterForeground()
+    }
+
+    func applicationWillResignActive(_ notification: Notification) {
+        AppDelegate.bluetoothViewModel?.applicationDidEnterBackground()
     }
 }
 

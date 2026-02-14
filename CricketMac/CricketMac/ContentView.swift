@@ -150,6 +150,9 @@ struct ContentView: View {
             // Set initial active source
             bluetoothViewModel.isActiveSource = (sensorSource == "BLE")
             ruuviViewModel.isActiveSource = (sensorSource == "Ruuvi")
+
+            // Set AppDelegate reference for background/foreground notifications
+            AppDelegate.bluetoothViewModel = bluetoothViewModel
         }
     }
 }
