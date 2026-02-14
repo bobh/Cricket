@@ -26,10 +26,31 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
     private let temperatureCharacteristicUUID = CBUUID(string: "78B20AF1-E597-40C1-A69C-304205B7E099")
     private let humidityCharacteristicUUID = CBUUID(string: "0BA15AA1-A805-4205-BC82-AF2E4A9364C5")
 
+    // Stored characteristic references (avoid repeated UUID searches)
+    private var temperatureCharacteristic: CBCharacteristic?
+    private var humidityCharacteristic: CBCharacteristic?
+
+    // Write flow control (for future LED control and configuration writes)
+    private var writeQueue: [Data] = []
+    private var isReadyToWrite: Bool = true
+
+    // Background execution support
+    private var heartbeatTimer: Timer?
+    private let foregroundHeartbeatInterval: TimeInterval = 20.0  // 20 seconds
+    private let backgroundHeartbeatInterval: TimeInterval = 60.0   // 60 seconds
+    private var isInBackground: Bool = false
+
     override init() {
         super.init()
         centralManager = CBCentralManager(delegate: self, queue: nil)
         loadStoredValues()
+    }
+
+    deinit {
+        stopHeartbeat()
+        if let peripheral = discoveredPeripheral {
+            centralManager.cancelPeripheralConnection(peripheral)
+        }
     }
 
     private func loadStoredValues() {
@@ -99,12 +120,218 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
         }
     }
 
-    func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        if central.state == .poweredOn {
-            connectionStatus = "Scanning for Arduino sensor..."
-            centralManager.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
+    // MARK: - BLE Cache Management
+
+    /// Clears BLE cache and restarts scanning
+    /// Useful during development when Arduino firmware changes
+    func clearBLECache() {
+        // Disconnect current peripheral if connected
+        if let peripheral = discoveredPeripheral {
+            centralManager.cancelPeripheralConnection(peripheral)
+        }
+
+        // Clear stored peripheral reference
+        discoveredPeripheral = nil
+
+        // Clear characteristic references
+        temperatureCharacteristic = nil
+        humidityCharacteristic = nil
+
+        // Clear cached peripheral data from UserDefaults
+        let defaults = UserDefaults.standard
+        let keys = defaults.dictionaryRepresentation().keys
+
+        for key in keys where key.hasPrefix("lastSeen_") || key.hasPrefix("fw_version_") {
+            defaults.removeObject(forKey: key)
+        }
+
+        // Reset UI state
+        DispatchQueue.main.async {
+            self.temperature = "--"
+            self.humidity = "--"
+            self.connectionStatus = "Cache cleared - Restarting scan..."
+        }
+
+        // Restart scanning after brief delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.startScanning()
+        }
+    }
+
+    // MARK: - Background Execution Support
+
+    /// Save peripheral state for restoration after app relaunch
+    private func preservePeripheralState() {
+        guard let peripheral = discoveredPeripheral else { return }
+
+        UserDefaults.standard.set(
+            peripheral.identifier.uuidString,
+            forKey: "lastConnectedPeripheralUUID"
+        )
+        print("💾 Saved peripheral UUID for restoration")
+    }
+
+    /// Restore connection to previously connected peripheral
+    func restorePeripheralConnection() {
+        guard let uuidString = UserDefaults.standard.string(forKey: "lastConnectedPeripheralUUID"),
+              let uuid = UUID(uuidString: uuidString) else {
+            print("ℹ️ No saved peripheral to restore")
+            return
+        }
+
+        // Retrieve peripheral by identifier
+        let peripherals = centralManager.retrievePeripherals(withIdentifiers: [uuid])
+
+        if let peripheral = peripherals.first {
+            print("🔄 Restoring connection to saved peripheral")
+            self.discoveredPeripheral = peripheral
+            peripheral.delegate = self
+            centralManager.connect(peripheral, options: nil)
+            connectionStatus = "Reconnecting to Arduino..."
         } else {
-            connectionStatus = "Bluetooth not available"
+            print("⚠️ Saved peripheral not found, starting fresh scan")
+            startScanning()
+        }
+    }
+
+    /// Start heartbeat to prevent 30-second auto-disconnect
+    func startHeartbeat() {
+        stopHeartbeat()
+
+        let interval = isInBackground ? backgroundHeartbeatInterval : foregroundHeartbeatInterval
+
+        heartbeatTimer = Timer.scheduledTimer(
+            withTimeInterval: interval,
+            repeats: true
+        ) { [weak self] _ in
+            self?.sendHeartbeat()
+        }
+
+        print("💓 Heartbeat started (\(Int(interval))s interval)")
+    }
+
+    /// Stop heartbeat timer
+    func stopHeartbeat() {
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
+    }
+
+    /// Send heartbeat to keep connection alive
+    private func sendHeartbeat() {
+        guard let peripheral = discoveredPeripheral,
+              let characteristic = temperatureCharacteristic else {
+            return
+        }
+
+        // Simple read to keep connection alive
+        peripheral.readValue(for: characteristic)
+        print("💓 Heartbeat sent")
+    }
+
+    /// Adjust heartbeat for background operation
+    func applicationDidEnterBackground() {
+        isInBackground = true
+        print("🌙 App entered background - adjusting heartbeat")
+
+        // Restart heartbeat with background interval
+        if heartbeatTimer != nil {
+            startHeartbeat()
+        }
+
+        // Save state for restoration
+        preservePeripheralState()
+    }
+
+    /// Adjust heartbeat for foreground operation
+    func applicationWillEnterForeground() {
+        isInBackground = false
+        print("☀️ App entered foreground - adjusting heartbeat")
+
+        // Restart heartbeat with foreground interval
+        if heartbeatTimer != nil {
+            startHeartbeat()
+        }
+    }
+
+    // MARK: - Write Flow Control
+
+    /// Write data to peripheral with proper flow control
+    /// - Parameters:
+    ///   - data: Data to write
+    ///   - withResponse: Whether to request response (default: false for .withoutResponse)
+    func writeValue(_ data: Data, withResponse: Bool = false) {
+        guard let peripheral = discoveredPeripheral,
+              let characteristic = temperatureCharacteristic else {
+            print("⚠️ Cannot write: No connected peripheral or characteristic")
+            return
+        }
+
+        if withResponse {
+            // .withResponse doesn't need flow control
+            peripheral.writeValue(data, for: characteristic, type: .withResponse)
+        } else {
+            // .withoutResponse needs flow control to prevent queue overflow
+            if peripheral.canSendWriteWithoutResponse {
+                peripheral.writeValue(data, for: characteristic, type: .withoutResponse)
+                isReadyToWrite = false
+            } else {
+                // Queue for later when peripheral is ready
+                writeQueue.append(data)
+                print("📝 Queued write (\(writeQueue.count) in queue)")
+            }
+        }
+    }
+
+    /// Example: Set LED color on Arduino (future feature)
+    /// - Parameter color: LED color to set
+    func setLEDColor(_ color: LEDColor) {
+        // Convert LEDColor enum to Data
+        let colorByte: UInt8 = color.rawValue
+        let data = Data([colorByte])
+
+        writeValue(data, withResponse: false)
+        print("🎨 LED color command sent: \(color)")
+    }
+
+    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        switch central.state {
+        case .poweredOn:
+            connectionStatus = "Scanning for Arduino sensor..."
+
+            // Try to restore previous connection first
+            if UserDefaults.standard.string(forKey: "lastConnectedPeripheralUUID") != nil {
+                restorePeripheralConnection()
+            } else {
+                // No saved peripheral, start fresh scan
+                centralManager.scanForPeripherals(
+                    withServices: [environmentalSensingServiceUUID],
+                    options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+                )
+            }
+
+        case .poweredOff:
+            connectionStatus = "Bluetooth is off - Enable in Settings"
+            temperature = "--"
+            humidity = "--"
+
+        case .unauthorized:
+            connectionStatus = "Bluetooth access denied - Check Privacy settings"
+            temperature = "--"
+            humidity = "--"
+
+        case .unsupported:
+            connectionStatus = "This device doesn't support Bluetooth Low Energy"
+            temperature = "--"
+            humidity = "--"
+
+        case .resetting:
+            connectionStatus = "Bluetooth resetting..."
+
+        case .unknown:
+            connectionStatus = "Bluetooth state unknown - waiting..."
+
+        @unknown default:
+            connectionStatus = "Unexpected Bluetooth state"
         }
     }
 
@@ -122,11 +349,29 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         connectionStatus = "Connected to Arduino"
         peripheral.discoverServices(nil)
+
+        // Start heartbeat to prevent 30-second auto-disconnect
+        startHeartbeat()
+
+        // Save state for restoration
+        preservePeripheralState()
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        connectionStatus = "Disconnected"
-        centralManager.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
+        // Stop heartbeat
+        stopHeartbeat()
+
+        if let error = error {
+            connectionStatus = "Disconnected: \(error.localizedDescription)"
+        } else {
+            connectionStatus = "Disconnected"
+        }
+
+        // Auto-reconnect: restart scanning
+        centralManager.scanForPeripherals(
+            withServices: [environmentalSensingServiceUUID],
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+        )
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -160,7 +405,12 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
         }
 
         for characteristic in characteristics {
-            if characteristic.uuid == temperatureCharacteristicUUID || characteristic.uuid == humidityCharacteristicUUID {
+            if characteristic.uuid == temperatureCharacteristicUUID {
+                temperatureCharacteristic = characteristic  // Store reference
+                peripheral.readValue(for: characteristic)
+                peripheral.setNotifyValue(true, for: characteristic)
+            } else if characteristic.uuid == humidityCharacteristicUUID {
+                humidityCharacteristic = characteristic  // Store reference
                 peripheral.readValue(for: characteristic)
                 peripheral.setNotifyValue(true, for: characteristic)
             }
@@ -221,6 +471,22 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
             }
         }
     }
+
+    func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
+        isReadyToWrite = true
+        print("✅ Peripheral ready for writes")
+
+        // Send queued writes
+        while !writeQueue.isEmpty && peripheral.canSendWriteWithoutResponse {
+            let data = writeQueue.removeFirst()
+            if let characteristic = temperatureCharacteristic {
+                peripheral.writeValue(data, for: characteristic, type: .withoutResponse)
+                print("📤 Sent queued write (\(writeQueue.count) remaining)")
+            }
+        }
+    }
+
+    // MARK: - Data Parsing
 
     // Helper to parse Arduino IEEE 754 float32 format (4 bytes, little-endian)
     private func parseTemperature(from data: Data) -> Float? {
