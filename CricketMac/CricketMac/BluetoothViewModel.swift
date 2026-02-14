@@ -30,6 +30,10 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
     private var temperatureCharacteristic: CBCharacteristic?
     private var humidityCharacteristic: CBCharacteristic?
 
+    // Write flow control (for future LED control and configuration writes)
+    private var writeQueue: [Data] = []
+    private var isReadyToWrite: Bool = true
+
     override init() {
         super.init()
         centralManager = CBCentralManager(delegate: self, queue: nil)
@@ -140,7 +144,47 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
             self?.startScanning()
         }
     }
-    
+
+    // MARK: - Write Flow Control
+
+    /// Write data to peripheral with proper flow control
+    /// - Parameters:
+    ///   - data: Data to write
+    ///   - withResponse: Whether to request response (default: false for .withoutResponse)
+    func writeValue(_ data: Data, withResponse: Bool = false) {
+        guard let peripheral = discoveredPeripheral,
+              let characteristic = temperatureCharacteristic else {
+            print("⚠️ Cannot write: No connected peripheral or characteristic")
+            return
+        }
+
+        if withResponse {
+            // .withResponse doesn't need flow control
+            peripheral.writeValue(data, for: characteristic, type: .withResponse)
+        } else {
+            // .withoutResponse needs flow control to prevent queue overflow
+            if peripheral.canSendWriteWithoutResponse {
+                peripheral.writeValue(data, for: characteristic, type: .withoutResponse)
+                isReadyToWrite = false
+            } else {
+                // Queue for later when peripheral is ready
+                writeQueue.append(data)
+                print("📝 Queued write (\(writeQueue.count) in queue)")
+            }
+        }
+    }
+
+    /// Example: Set LED color on Arduino (future feature)
+    /// - Parameter color: LED color to set
+    func setLEDColor(_ color: LEDColor) {
+        // Convert LEDColor enum to Data
+        let colorByte: UInt8 = color.rawValue
+        let data = Data([colorByte])
+
+        writeValue(data, withResponse: false)
+        print("🎨 LED color command sent: \(color)")
+    }
+
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {
         case .poweredOn:
@@ -297,6 +341,22 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
             }
         }
     }
+
+    func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
+        isReadyToWrite = true
+        print("✅ Peripheral ready for writes")
+
+        // Send queued writes
+        while !writeQueue.isEmpty && peripheral.canSendWriteWithoutResponse {
+            let data = writeQueue.removeFirst()
+            if let characteristic = temperatureCharacteristic {
+                peripheral.writeValue(data, for: characteristic, type: .withoutResponse)
+                print("📤 Sent queued write (\(writeQueue.count) remaining)")
+            }
+        }
+    }
+
+    // MARK: - Data Parsing
 
     // Helper to parse Arduino IEEE 754 float32 format (4 bytes, little-endian)
     private func parseTemperature(from data: Data) -> Float? {
