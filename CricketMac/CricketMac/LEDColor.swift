@@ -15,13 +15,15 @@ enum LEDColor: UInt8 {
     case green = 1
     case amber = 2
     case blue = 3
-    
+    case white = 4  // All colors combined
+
     var swiftUIColor: Color {
         switch self {
         case .red: return .red
         case .green: return .green
         case .amber: return .orange // Amber as yellowish-orange
         case .blue: return .blue
+        case .white: return .white
         }
     }
     
