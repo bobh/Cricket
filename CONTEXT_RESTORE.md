@@ -88,6 +88,125 @@ This is **ambient intelligence** - sensors become invisible infrastructure for A
 
 ---
 
+## BLE Implementation Improvements (Feb 12, 2026)
+
+### ✅ Completed: Comprehensive Core Bluetooth Enhancements
+
+Implemented industry best practices from Punch Through Core Bluetooth expert guide across both macOS and iOS platforms.
+
+**Status**:
+- ✅ Code Implementation: Complete
+- ⏸️ Compilation: Pending new Xcode release
+- ⏳ Testing: Awaiting compilation
+
+### Improvements Implemented
+
+**Priority 1 Critical Fixes (Both Platforms):**
+1. **Consistent Service Filtering** - Changed from `withServices: nil` to `[environmentalSensingServiceUUID]` everywhere
+   - Reduces power consumption
+   - Accelerates peripheral discovery
+   - Only discovers relevant Arduino sensors
+
+2. **Complete Bluetooth State Handling** - Comprehensive switch statement covering all 7 CBManagerState cases
+   - `.poweredOn`, `.poweredOff`, `.unauthorized`, `.unsupported`, `.resetting`, `.unknown`, `@unknown default`
+   - Clear, actionable error messages for users
+   - Proper guidance for each state
+
+3. **Characteristic Reference Storage** - Store references instead of repeated UUID searches
+   - Added `temperatureCharacteristic` and `humidityCharacteristic` properties
+   - More efficient code pattern
+
+**Advanced Features:**
+4. **Manual BLE Cache Clear** - Development tool for firmware updates
+   - `clearBLECache()` method implemented
+   - UI button in macOS SettingsView (Developer Tools section)
+   - iOS method ready, UI integration pending
+
+5. **Write Flow Control** - Prevents BLE transmit queue overflow
+   - Write queue management for `.withoutResponse` operations
+   - `peripheralIsReady(toSendWriteWithoutResponse)` callback handling
+   - Ready for future LED control feature
+
+6. **Background Execution Support** - Maintains connection when app backgrounded/window closed
+   - State preservation via UserDefaults
+   - State restoration with `retrievePeripherals(withIdentifiers:)`
+   - Heartbeat mechanism: 20s (foreground) / 60s (background)
+   - Prevents iOS 30-second auto-disconnect
+   - Ready for widget integration (Priority 0 task)
+   - macOS lifecycle integration via AppDelegate
+
+### Files Modified
+
+**macOS:**
+- `CricketMac/CricketMac/BluetoothViewModel.swift` (+238 lines, -6 lines)
+- `CricketMac/CricketMac/SettingsView.swift` (+48 lines, -1 line)
+- `CricketMac/CricketMac/ContentView.swift` (+5 lines, -1 line)
+- `CricketMac/CricketMac/CricketMac.swift` (+16 lines, -1 line)
+
+**iOS:**
+- `IOS--BLE Central/BLE_Central/BluetoothViewModel.swift` (+273 lines, -7 lines)
+
+**Documentation:**
+- `BLE_CRITICAL_FIXES.md` (new)
+- `BLE_ADVANCED_CONSIDERATIONS.md` (new)
+- `CORE_BLUETOOTH_BEST_PRACTICES.md` (new - reusable for any BLE project)
+- `BLE_IMPLEMENTATION_PLAN.md` (new)
+- `BLE_IMPLEMENTATION_LOG.md` (new - comprehensive implementation record)
+
+### Git Commits
+
+All changes committed to main branch:
+1. `ced9c4d` - BLE: Apply Priority 1 critical fixes to macOS
+2. `894d2be` - BLE: Add manual cache clear functionality
+3. `c91b83f` - BLE: Implement write flow control for peripheral writes
+4. `449cc0c` - BLE: Implement background execution support
+5. `91490ea` - BLE: Apply all improvements to iOS version
+
+### Testing Required (After New Xcode Release)
+
+**Priority Tests:**
+1. Build succeeds on both platforms
+2. Zero compiler warnings maintained
+3. Arduino discovery works with service filtering
+4. Temperature/humidity updates continue working
+5. Cache clear button functional (macOS)
+6. State messages accurate (test by toggling Bluetooth)
+
+**Background Execution Tests:**
+7. Connection maintained when window closed (macOS)
+8. Reconnects after app relaunch
+9. Heartbeat prevents disconnect
+10. Background/foreground transitions smooth
+
+### Benefits for Cricket's Roadmap
+
+**Immediate:**
+- Development efficiency (cache clear eliminates firmware friction)
+- Code quality (follows industry best practices)
+- User experience (clear, actionable error messages)
+- Power efficiency (service filtering reduces energy use)
+
+**Enables Future Features:**
+- Widget integration (background support ready)
+- LED control (write flow control implemented)
+- Menu bar app for macOS (background execution ready)
+- Ambient intelligence continuous operation
+
+**WWDC 26 Preparation:**
+- Solid foundation for entity-based invocation
+- Background pattern learning via intent donation
+- Professional implementation for demos
+
+### Documentation
+
+For complete technical details, see:
+- **BLE_IMPLEMENTATION_LOG.md** - Comprehensive implementation record with before/after code
+- **CORE_BLUETOOTH_BEST_PRACTICES.md** - Reusable universal guide
+- **BLE_CRITICAL_FIXES.md** - Priority 1 fixes specific to Cricket
+- **BLE_ADVANCED_CONSIDERATIONS.md** - Cost/benefit analysis
+
+---
+
 ## File Locations
 
 ### Critical Documentation

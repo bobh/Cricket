@@ -168,14 +168,12 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
             peripheral.identifier.uuidString,
             forKey: "lastConnectedPeripheralUUID"
         )
-        print("💾 Saved peripheral UUID for restoration")
     }
 
     /// Restore connection to previously connected peripheral
     func restorePeripheralConnection() {
         guard let uuidString = UserDefaults.standard.string(forKey: "lastConnectedPeripheralUUID"),
               let uuid = UUID(uuidString: uuidString) else {
-            print("ℹ️ No saved peripheral to restore")
             return
         }
 
@@ -183,13 +181,11 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
         let peripherals = centralManager.retrievePeripherals(withIdentifiers: [uuid])
 
         if let peripheral = peripherals.first {
-            print("🔄 Restoring connection to saved peripheral")
             self.discoveredPeripheral = peripheral
             peripheral.delegate = self
             centralManager.connect(peripheral, options: nil)
             connectionStatus = "Reconnecting to Arduino..."
         } else {
-            print("⚠️ Saved peripheral not found, starting fresh scan")
             startScanning()
         }
     }
@@ -206,8 +202,6 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
         ) { [weak self] _ in
             self?.sendHeartbeat()
         }
-
-        print("💓 Heartbeat started (\(Int(interval))s interval)")
     }
 
     /// Stop heartbeat timer
@@ -225,13 +219,11 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
 
         // Simple read to keep connection alive
         peripheral.readValue(for: characteristic)
-        print("💓 Heartbeat sent")
     }
 
     /// Adjust heartbeat for background operation
     func applicationDidEnterBackground() {
         isInBackground = true
-        print("🌙 App entered background - adjusting heartbeat")
 
         // Restart heartbeat with background interval
         if heartbeatTimer != nil {
@@ -245,7 +237,6 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
     /// Adjust heartbeat for foreground operation
     func applicationWillEnterForeground() {
         isInBackground = false
-        print("☀️ App entered foreground - adjusting heartbeat")
 
         // Restart heartbeat with foreground interval
         if heartbeatTimer != nil {
@@ -262,7 +253,6 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
     func writeValue(_ data: Data, withResponse: Bool = false) {
         guard let peripheral = discoveredPeripheral,
               let characteristic = temperatureCharacteristic else {
-            print("⚠️ Cannot write: No connected peripheral or characteristic")
             return
         }
 
@@ -277,7 +267,6 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
             } else {
                 // Queue for later when peripheral is ready
                 writeQueue.append(data)
-                print("📝 Queued write (\(writeQueue.count) in queue)")
             }
         }
     }
@@ -290,7 +279,6 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
         let data = Data([colorByte])
 
         writeValue(data, withResponse: false)
-        print("🎨 LED color command sent: \(color)")
     }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
@@ -336,8 +324,19 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
     }
     
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
+        // Check by service UUID (preferred method)
         if let serviceUUIDs = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID],
            serviceUUIDs.contains(environmentalSensingServiceUUID) {
+            centralManager.stopScan()
+            discoveredPeripheral = peripheral
+            discoveredPeripheral?.delegate = self
+            centralManager.connect(peripheral, options: nil)
+            connectionStatus = "Connecting to Arduino..."
+            return
+        }
+
+        // Fallback: Also try matching by device name
+        if let name = peripheral.name, name == "Nano33BLE_Sensor" {
             centralManager.stopScan()
             discoveredPeripheral = peripheral
             discoveredPeripheral?.delegate = self
@@ -474,14 +473,12 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
 
     func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
         isReadyToWrite = true
-        print("✅ Peripheral ready for writes")
 
         // Send queued writes
         while !writeQueue.isEmpty && peripheral.canSendWriteWithoutResponse {
             let data = writeQueue.removeFirst()
             if let characteristic = temperatureCharacteristic {
                 peripheral.writeValue(data, for: characteristic, type: .withoutResponse)
-                print("📤 Sent queued write (\(writeQueue.count) remaining)")
             }
         }
     }
