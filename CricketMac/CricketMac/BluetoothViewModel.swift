@@ -59,22 +59,31 @@ class BluetoothViewModel: NSObject, ObservableObject, CBCentralManagerDelegate, 
     }
     
     private func saveValues() {
-        // Only save to UserDefaults if this is the active sensor source
-        guard isActiveSource else { return }
+        // ALWAYS save Arduino data with unique keys for calibration logging
+        // Active sensor still writes to generic keys for UI/intents
 
-        // Save to standard UserDefaults for App Intents access
-        UserDefaults.standard.set(temperature, forKey: "currentTemperature")
-        UserDefaults.standard.set(humidity, forKey: "currentHumidity")
-        UserDefaults.standard.set(connectionStatus, forKey: "connectionStatus")
+        // Save Arduino-specific data (always)
+        UserDefaults.standard.set(temperature, forKey: "arduino_temperature")
+        UserDefaults.standard.set(humidity, forKey: "arduino_humidity")
+        UserDefaults.standard.set(connectionStatus, forKey: "arduino_status")
+        UserDefaults.standard.set(Date(), forKey: "arduino_lastUpdated")
+
+        // Only save to generic keys if active sensor (for UI/intents)
+        if isActiveSource {
+            UserDefaults.standard.set(temperature, forKey: "currentTemperature")
+            UserDefaults.standard.set(humidity, forKey: "currentHumidity")
+            UserDefaults.standard.set(connectionStatus, forKey: "connectionStatus")
+
+            // Also save to shared defaults for widgets
+            sharedDefaults?.set(temperature, forKey: "temperature")
+            sharedDefaults?.set(humidity, forKey: "humidity")
+            sharedDefaults?.synchronize()
+
+            // Donate intents only for active sensor
+            donateIntents()
+        }
+
         UserDefaults.standard.synchronize()
-
-        // Also save to shared defaults for potential widgets
-        sharedDefaults?.set(temperature, forKey: "temperature")
-        sharedDefaults?.set(humidity, forKey: "humidity")
-        sharedDefaults?.synchronize()
-
-        // Donate intents to Apple Intelligence for pattern learning
-        donateIntents()
     }
 
     private func donateIntents() {

@@ -29,22 +29,30 @@ class RuuviTagViewModel: NSObject, ObservableObject, CBCentralManagerDelegate {
     }
 
     private func saveValues() {
-        // Only save to UserDefaults if this is the active sensor source
-        guard isActiveSource else { return }
+        // ALWAYS save RuuviTag data with unique keys for calibration logging
 
-        // Save to standard UserDefaults for App Intents access
-        UserDefaults.standard.set(temperature, forKey: "currentTemperature")
-        UserDefaults.standard.set(humidity, forKey: "currentHumidity")
-        UserDefaults.standard.set(connectionStatus, forKey: "connectionStatus")
+        // Save RuuviTag-specific data (always)
+        UserDefaults.standard.set(temperature, forKey: "ruuvi_temperature")
+        UserDefaults.standard.set(humidity, forKey: "ruuvi_humidity")
+        UserDefaults.standard.set(connectionStatus, forKey: "ruuvi_status")
+        UserDefaults.standard.set(Date(), forKey: "ruuvi_lastUpdated")
+
+        // Only save to generic keys if active sensor (for UI/intents)
+        if isActiveSource {
+            UserDefaults.standard.set(temperature, forKey: "currentTemperature")
+            UserDefaults.standard.set(humidity, forKey: "currentHumidity")
+            UserDefaults.standard.set(connectionStatus, forKey: "connectionStatus")
+
+            // Also save to shared defaults for widgets
+            sharedDefaults?.set(temperature, forKey: "temperature")
+            sharedDefaults?.set(humidity, forKey: "humidity")
+            sharedDefaults?.synchronize()
+
+            // Donate intents only for active sensor
+            donateIntents()
+        }
+
         UserDefaults.standard.synchronize()
-
-        // Also save to shared defaults for widgets
-        sharedDefaults?.set(temperature, forKey: "temperature")
-        sharedDefaults?.set(humidity, forKey: "humidity")
-        sharedDefaults?.synchronize()
-
-        // Donate intents to Apple Intelligence for pattern learning
-        donateIntents()
     }
 
     private func donateIntents() {
