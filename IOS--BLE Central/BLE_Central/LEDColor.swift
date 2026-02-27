@@ -9,11 +9,11 @@ import SwiftUI
 import Combine
 
 /// Enum for LED colors
-enum LEDColor {
-    case red
-    case green
-    case amber
-    case blue
+enum LEDColor: UInt8 {
+    case red = 0
+    case green = 1
+    case amber = 2
+    case blue = 3
 
     var swiftUIColor: Color {
         switch self {
