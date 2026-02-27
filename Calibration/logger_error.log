@@ -1,0 +1,2 @@
+/Applications/Xcode.app/Contents/Developer/usr/bin/python3: can't open file '/Users/bobh/Desktop/Projects/Cricket/Calibration/sensor_logger_v2.py': [Errno 1] Operation not permitted
+/bin/bash: /Users/bobh/Desktop/Projects/Cricket/Calibration/run_logger.sh: Operation not permitted
