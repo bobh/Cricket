@@ -60,8 +60,9 @@ This is **ambient intelligence** - sensors become invisible infrastructure for A
 ### ⏳ Pending
 1. **Widget Integration** (can do anytime)
 2. **iOS 26.4 Testing** (Q1 2026) - Test Siri improvements
-3. **App Rename** (conditional) - Cricket → Local Sensor if iOS 26.4 improves routing
-4. **WWDC 26 Adoption** (June 2026) - Entity-based invocation APIs
+3. **Swift Modernization** (post iOS 26.4) - Adopt @Observable, Swift Concurrency, modern APIs (6-9 hours)
+4. **App Rename** (conditional) - Cricket → Local Sensor if iOS 26.4 improves routing
+5. **WWDC 26 Adoption** (June 2026) - Entity-based invocation APIs
 
 ### 📊 Project Status
 - **Suspended**: November 4, 2025
@@ -204,6 +205,7 @@ For complete technical details, see:
 - **CORE_BLUETOOTH_BEST_PRACTICES.md** - Reusable universal guide
 - **BLE_CRITICAL_FIXES.md** - Priority 1 fixes specific to Cricket
 - **BLE_ADVANCED_CONSIDERATIONS.md** - Cost/benefit analysis
+- **SWIFT_MODERNIZATION_ANALYSIS.md** - Swift 6 modernization plan (Feb 2026, deferred to post iOS 26.4)
 
 ---
 
