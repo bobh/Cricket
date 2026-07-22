@@ -7,26 +7,26 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		47F845B62E1EB2E500216169 /* CricketIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CricketIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		47F845B62E1EB2E500216169 /* CricketAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CricketAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		47F845C62E1EB7E400216169 /* Exceptions for "CricketIOS" folder in "CricketIOS" target */ = {
+		47F845C62E1EB7E400216169 /* Exceptions for "CricketAI" folder in "CricketAI" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 47F845B52E1EB2E500216169 /* CricketIOS */;
+			target = 47F845B52E1EB2E500216169 /* CricketAI */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		47F845B82E1EB2E500216169 /* CricketIOS */ = {
+		47F845B82E1EB2E500216169 /* CricketAI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				47F845C62E1EB7E400216169 /* Exceptions for "CricketIOS" folder in "CricketIOS" target */,
+				47F845C62E1EB7E400216169 /* Exceptions for "CricketAI" folder in "CricketAI" target */,
 			);
-			path = CricketIOS;
+			path = CricketAI;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -45,7 +45,7 @@
 		47F845AD2E1EB2E500216169 = {
 			isa = PBXGroup;
 			children = (
-				47F845B82E1EB2E500216169 /* CricketIOS */,
+				47F845B82E1EB2E500216169 /* CricketAI */,
 				47F845B72E1EB2E500216169 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -53,7 +53,7 @@
 		47F845B72E1EB2E500216169 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				47F845B62E1EB2E500216169 /* CricketIOS.app */,
+				47F845B62E1EB2E500216169 /* CricketAI.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -61,9 +61,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		47F845B52E1EB2E500216169 /* CricketIOS */ = {
+		47F845B52E1EB2E500216169 /* CricketAI */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 47F845C12E1EB2E600216169 /* Build configuration list for PBXNativeTarget "CricketIOS" */;
+			buildConfigurationList = 47F845C12E1EB2E600216169 /* Build configuration list for PBXNativeTarget "CricketAI" */;
 			buildPhases = (
 				47F845B22E1EB2E500216169 /* Sources */,
 				47F845B32E1EB2E500216169 /* Frameworks */,
@@ -74,13 +74,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				47F845B82E1EB2E500216169 /* CricketIOS */,
+				47F845B82E1EB2E500216169 /* CricketAI */,
 			);
-			name = CricketIOS;
+			name = CricketAI;
 			packageProductDependencies = (
 			);
-			productName = CricketIOS;
-			productReference = 47F845B62E1EB2E500216169 /* CricketIOS.app */;
+			productName = CricketAI;
+			productReference = 47F845B62E1EB2E500216169 /* CricketAI.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -90,15 +90,15 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2600;
-				LastUpgradeCheck = 2600;
+				LastSwiftUpdateCheck = 2630;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					47F845B52E1EB2E500216169 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
 			};
-			buildConfigurationList = 47F845B12E1EB2E500216169 /* Build configuration list for PBXProject "CricketIOS" */;
+			buildConfigurationList = 47F845B12E1EB2E500216169 /* Build configuration list for PBXProject "CricketAI" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -112,7 +112,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				47F845B52E1EB2E500216169 /* CricketIOS */,
+				47F845B52E1EB2E500216169 /* CricketAI */,
 			);
 		};
 /* End PBXProject section */
@@ -197,6 +197,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -254,6 +255,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -264,12 +266,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "Demetor_Icons 1";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CricketAI/CricketAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 68U33HS2JC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = CricketIOS/Info.plist;
+				INFOPLIST_FILE = CricketAI/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -280,7 +283,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "wm6h.Cricket-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = "wm6h.CricketAI";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -297,12 +300,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "Demetor_Icons 1";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CricketAI/CricketAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 68U33HS2JC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = CricketIOS/Info.plist;
+				INFOPLIST_FILE = CricketAI/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -313,7 +317,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "wm6h.Cricket-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = "wm6h.CricketAI";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -328,7 +332,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		47F845B12E1EB2E500216169 /* Build configuration list for PBXProject "CricketIOS" */ = {
+		47F845B12E1EB2E500216169 /* Build configuration list for PBXProject "CricketAI" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				47F845BF2E1EB2E600216169 /* Debug */,
@@ -337,7 +341,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		47F845C12E1EB2E600216169 /* Build configuration list for PBXNativeTarget "CricketIOS" */ = {
+		47F845C12E1EB2E600216169 /* Build configuration list for PBXNativeTarget "CricketAI" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				47F845C22E1EB2E600216169 /* Debug */,

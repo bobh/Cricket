@@ -1,30 +1,31 @@
 //
 //  ContentView.swift
-//  BLE_Central - Cricket
-//
-//  iOS version with improvements ported from macOS
+//  CricketIOS
 //
 
 import SwiftUI
-import Combine
+import WidgetKit
 
 struct ContentView: View {
     // Sensor source selection
     @AppStorage("sensorSource") private var sensorSource: String = "BLE"
 
     // View Models - both Arduino BLE and RuuviTag
-    @StateObject private var bluetoothViewModel = BluetoothViewModel()
-    @StateObject private var ruuviViewModel = RuuviTagViewModel()
+    @State private var bluetoothViewModel = BluetoothViewModel()
+    @State private var ruuviViewModel = RuuviTagViewModel()
 
     // UI State
     @State private var showSettings = false
 
+    private let sharedDefaults = UserDefaults(suiteName: "group.wm6h.CricketAI")
+    @AppStorage("useFahrenheit") private var useFahrenheit: Bool = false
+
     // Helper function to switch sensor sources
     private func changeSensorSource(_ newSource: String) {
         sensorSource = newSource
-        // Update which ViewModel is active for UserDefaults writes
         bluetoothViewModel.isActiveSource = (newSource == "BLE")
         ruuviViewModel.isActiveSource = (newSource == "Ruuvi")
+        sharedDefaults?.set(newSource, forKey: "sensorSource")
     }
 
     var currentTemperature: String {
@@ -85,15 +86,15 @@ struct ContentView: View {
                     VStack(spacing: 8) {
                         Image(systemName: "thermometer.medium")
                             .font(.system(size: 40))
-                            .foregroundColor(DesignColor.brandBlue)
+                            .foregroundStyle(DesignColor.brandBlue)
 
                         Text("Cricket")
                             .font(.largeTitle)
-                            .fontWeight(.bold)
+                            .bold()
 
                         Text("Hyperlocal Monitoring")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                     .padding(.top)
 
@@ -108,22 +109,22 @@ struct ContentView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(currentStatus)
                                 .font(.headline)
-                                .foregroundColor(statusColor)
+                                .foregroundStyle(statusColor)
 
                             Text(sensorSource == "BLE" ? "Arduino Nano 33 Sense Rev 2" : "RuuviTag")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
 
                             Text(lastUpdatedText)
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
 
                         Spacer()
                     }
                     .padding()
                     .background(DesignColor.cardBackground)
-                    .cornerRadius(12)
+                    .clipShape(.rect(cornerRadius: 12))
                     .padding(.horizontal)
 
                     // Main Readings
@@ -132,37 +133,31 @@ struct ContentView: View {
                         VStack(spacing: 16) {
                             Image(systemName: "thermometer.medium")
                                 .font(.system(size: 50))
-                                .foregroundColor(DesignColor.brandOrange)
+                                .foregroundStyle(DesignColor.brandOrange)
 
                             VStack(alignment: .center, spacing: 4) {
                                 Text("Temperature")
                                     .font(DesignFont.label())
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
 
                                 VStack(alignment: .center, spacing: 8) {
-                                    Text(currentTemperature)
+                                    Text(useFahrenheit
+                                         ? (currentTemperatureFahrenheit == "--" ? "--" : "\(currentTemperatureFahrenheit) °F")
+                                         : currentTemperature)
                                         .font(DesignFont.readingXL())
-                                        .foregroundColor(.primary)
+                                        .foregroundStyle(.primary)
 
-                                    HStack(alignment: .top, spacing: 0) {
-                                        Text(currentTemperatureFahrenheit)
-                                            .font(.system(size: 32, weight: .bold, design: .rounded))
-                                            .foregroundColor(.secondary)
-                                        Text("°")
-                                            .font(.system(size: 24, weight: .bold, design: .rounded))
-                                            .foregroundColor(.secondary)
-                                            .offset(y: 2)
-                                        Text("F")
-                                            .font(.system(size: 32, weight: .bold, design: .rounded))
-                                            .foregroundColor(.secondary)
-                                    }
+                                    Text(useFahrenheit ? currentTemperature
+                                         : (currentTemperatureFahrenheit == "--" ? "--" : "\(currentTemperatureFahrenheit) °F"))
+                                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
                         .frame(maxWidth: .infinity)
                         .padding(32)
                         .background(DesignColor.cardBackground)
-                        .cornerRadius(16)
+                        .clipShape(.rect(cornerRadius: 16))
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("Temperature")
                         .accessibilityValue("\(currentTemperature), \(currentTemperatureFahrenheit) degrees Fahrenheit")
@@ -171,22 +166,22 @@ struct ContentView: View {
                         VStack(spacing: 16) {
                             Image(systemName: "humidity.fill")
                                 .font(.system(size: 50))
-                                .foregroundColor(DesignColor.brandBlue)
+                                .foregroundStyle(DesignColor.brandBlue)
 
                             VStack(alignment: .center, spacing: 4) {
                                 Text("Humidity")
                                     .font(DesignFont.label())
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
 
                                 Text(currentHumidity)
                                     .font(DesignFont.readingXL())
-                                    .foregroundColor(.primary)
+                                    .foregroundStyle(.primary)
                             }
                         }
                         .frame(maxWidth: .infinity)
                         .padding(32)
                         .background(DesignColor.cardBackground)
-                        .cornerRadius(16)
+                        .clipShape(.rect(cornerRadius: 16))
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("Humidity")
                         .accessibilityValue(currentHumidity)
@@ -224,20 +219,20 @@ struct ContentView: View {
                     VStack(spacing: 12) {
                         Text("Sensor Source")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
 
                         HStack(spacing: 16) {
                             Button(action: { changeSensorSource("BLE") }) {
                                 VStack(spacing: 8) {
                                     Image(systemName: "hammer.fill")
                                         .font(.system(size: 30))
-                                        .foregroundColor(sensorSource == "BLE" ? .white : DesignColor.brandBlue)
+                                        .foregroundStyle(sensorSource == "BLE" ? .white : DesignColor.brandBlue)
                                         .padding()
                                         .background(sensorSource == "BLE" ? DesignColor.brandBlue : Color.clear)
-                                        .cornerRadius(12)
+                                        .clipShape(.rect(cornerRadius: 12))
                                     Text("Arduino DIY")
                                         .font(.caption)
-                                        .foregroundColor(.primary)
+                                        .foregroundStyle(.primary)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -246,13 +241,13 @@ struct ContentView: View {
                                 VStack(spacing: 8) {
                                     Image(systemName: "antenna.radiowaves.left.and.right")
                                         .font(.system(size: 30))
-                                        .foregroundColor(sensorSource == "Ruuvi" ? .white : DesignColor.brandGreen)
+                                        .foregroundStyle(sensorSource == "Ruuvi" ? .white : DesignColor.brandGreen)
                                         .padding()
                                         .background(sensorSource == "Ruuvi" ? DesignColor.brandGreen : Color.clear)
-                                        .cornerRadius(12)
+                                        .clipShape(.rect(cornerRadius: 12))
                                     Text("RuuviTag")
                                         .font(.caption)
-                                        .foregroundColor(.primary)
+                                        .foregroundStyle(.primary)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -262,10 +257,23 @@ struct ContentView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        useFahrenheit.toggle()
+                        sharedDefaults?.set(useFahrenheit, forKey: "useFahrenheit")
+                        WidgetCenter.shared.reloadAllTimelines()
+                    } label: {
+                        Text(useFahrenheit ? "°C" : "°F")
+                            .font(.headline)
+                    }
+                }
+            }
             .onAppear {
-                // Set initial active source
                 bluetoothViewModel.isActiveSource = (sensorSource == "BLE")
                 ruuviViewModel.isActiveSource = (sensorSource == "Ruuvi")
+                sharedDefaults?.set(sensorSource, forKey: "sensorSource")
+                sharedDefaults?.set(useFahrenheit, forKey: "useFahrenheit")
 
                 if sensorSource == "BLE" {
                     bluetoothViewModel.startScanning()
@@ -293,24 +301,24 @@ struct InfoCard: View {
         HStack(spacing: 16) {
             Image(systemName: icon)
                 .font(.title2)
-                .foregroundColor(color)
+                .foregroundStyle(color)
                 .frame(width: 40)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.headline)
-                    .fontWeight(.semibold)
+                    .bold()
 
                 Text(description)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
         }
         .padding()
         .background(DesignColor.cardBackground)
-        .cornerRadius(12)
+        .clipShape(.rect(cornerRadius: 12))
     }
 }
 

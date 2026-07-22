@@ -1,6 +1,6 @@
 //
-//  CricketIOSApp.swift
-//  CricketIOS
+//  CricketAIApp.swift
+//  CricketAI
 //
 //  Created by bobh on 7/9/25.
 //
@@ -9,7 +9,7 @@ import SwiftUI
 import AppIntents
 
 @main
-struct CricketIOSApp: App {
+struct CricketAIApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
