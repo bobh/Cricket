@@ -40,8 +40,31 @@ struct Reading: Sendable, Equatable, Identifiable, Codable {
     let timestamp: Date            // capture time (DR-1 / FR-4)
     let source: SensorSource
 
-    /// Derived — never stored. (DR-3: no pressure field. Deliberate and permanent for v1.)
+    // MARK: Optional, source-capability-aware metrics (DR-3, revised 2026-07-23)
+    // NOT part of the ⭐acid test (temp + humidity drive ESD/CMOS + material domains).
+    // Modeled as Optional so a source/build that can't supply them returns nil — the
+    // freshness/disclosure layer then says "pressure unavailable from this source"
+    // rather than fabricating a value. Do NOT build agent features on these until a
+    // concrete workshop use case (e.g. pressure *trend*) justifies it.
+
+    /// Barometric pressure in hectopascals (hPa). nil when the source doesn't report it.
+    /// RuuviTag (new model, RAWv2) supplies it for free; Rev-2 Arduino can via the onboard
+    /// LPS22HB IF the firmware exposes a pressure characteristic (an Arduino build without
+    /// it reports `.arduino` yet yields `pressureHPa == nil` — nil is authoritative).
+    let pressureHPa: Double?
+
+    /// Monotonic disturbance/movement counter. nil when the source doesn't report motion.
+    /// RuuviTag provides it natively (RAWv2); a Rev-2 Arduino build can synthesize it from a
+    /// BMI270 any-motion interrupt. A minimal, source-agnostic "was it disturbed" signal —
+    /// deliberately not a raw 3-axis vector.
+    let movementCount: Int?
+
+    /// Derived — never stored.
     var fahrenheit: Double { celsius * 9.0 / 5.0 + 32.0 }
+
+    /// Which optional metrics this particular reading carries (for dialog/disclosure copy).
+    var hasPressure: Bool { pressureHPa != nil }
+    var hasMotion: Bool { movementCount != nil }
 }
 
 // MARK: - UnavailableReason
@@ -228,7 +251,9 @@ struct CricketCoreFreshnessTests {
                 celsius: 21.0,
                 relativeHumidity: 45.0,
                 timestamp: base.addingTimeInterval(-ageSeconds),
-                source: .arduino)
+                source: .arduino,
+                pressureHPa: nil,        // optional metric absent in this fixture
+                movementCount: nil)
     }
 
     @Test("Recent reading is fresh")

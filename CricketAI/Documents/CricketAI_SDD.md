@@ -7,7 +7,7 @@
 **Toolchain:** Xcode 27.0 beta 3 (build 27A5218g), iOS 27.0 SDK, Swift 6.4  
 **Source document:** CricketAI SRS draft v0.1, dated 2026-07-12  
 **Design thesis:** local sensor data + local model reasoning = better answers for questions where immediate hyperlocal conditions matter  
-**v0.2 note:** All "confirm against SDK" items resolved against the installed iOS 27.0 SDK on 2026-07-16. See `CricketAI_SDD_Review.md` for the verification record. Changed sections: §8.2, §8.5, §11, §13, §17, §19.
+**v0.2 note:** All "confirm against SDK" items resolved against the installed iOS 27.0 SDK on 2026-07-16. See `CricketAI_SDD_Review.md` for the verification record. Changed sections: §8.2, §8.5, §11, §13, §17, §19. Added §8.6 (Spotlight & System Indexing) on 2026-07-23.
 
 ---
 
@@ -45,7 +45,7 @@ Success means the model uses its built-in ESD/CMOS domain knowledge, calls Crick
 - No third-party cloud LLMs in v1.
 - No MCP integration in v1.
 - No external weather lookup as a substitute for CricketAI's current local reading.
-- No pressure field in v1 unless Bob explicitly reverses the SRS decision and sensor firmware supplies pressure.
+- No agent *features* built on pressure/motion in v1 — these are optional, disclosed data-model fields only (see §6.1, SDD-3), not part of the ⭐acid test. Pressure-*trend* reasoning is a candidate for a later version.
 
 ---
 
@@ -117,11 +117,19 @@ struct Reading: Sendable, Equatable, Identifiable, Codable {
     let timestamp: Date
     let source: SensorSource
 
+    // Optional, source-capability-aware metrics (DR-3, revised 2026-07-23). NOT part of
+    // the acid test. nil when the source/firmware build doesn't supply the metric — nil
+    // is authoritative and drives "unavailable from this source" disclosure copy.
+    let pressureHPa: Double?     // RuuviTag RAWv2 (free); Rev-2 Arduino via onboard LPS22HB if firmware exposes a char
+    let movementCount: Int?      // RuuviTag RAWv2 native; Rev-2 Arduino synthesizable from BMI270 any-motion interrupt
+
     var fahrenheit: Double { celsius * 9.0 / 5.0 + 32.0 }
+    var hasPressure: Bool { pressureHPa != nil }
+    var hasMotion: Bool { movementCount != nil }
 }
 ```
 
-`Reading` contains accepted, sentinel-filtered data only. Invalid sensor values are never stored as readings.
+`Reading` contains accepted, sentinel-filtered data only. Invalid sensor values are never stored as readings. **Pressure/motion (DR-3, revised 2026-07-23):** modeled as `Optional` so temperature+humidity (the acid-test core) stay mandatory while optional metrics are added without a schema break. Both the Nano 33 BLE Sense Rev 2 (onboard LPS22HB pressure + BMI270 IMU — **no external sensor required**) and the new RuuviTag model can supply them; RuuviTag's arrive for free in the advertisement. v1 stores and discloses them but builds no agent features on them.
 
 ### 6.2 Reading Result
 
@@ -264,6 +272,62 @@ The main reading view associates its `EnvironmentalReadingEntity` with the on-sc
 - SwiftUI `.userActivity(...)` — advertise the current reading as the active user activity where appropriate.
 
 `IndexedEntity` conformance supports association priority. This capability is confirmed available and in scope for v1.
+
+### 8.6 Spotlight & System Indexing (Optional Exposure)
+
+While primary model interactions occur within `LanguageModelSession` via tool invocations (`Tool<Arguments, Output>`), high-value entity states MAY be surfaced to the system search index to enable proactive system UI integration (e.g., Spotlight, Siri Suggestions).
+
+#### 8.6.1 Semantic Indexing Strategy
+
+To avoid stale sensor data persisting in system search indices, entity indexing MUST decouple the lookup handle from volatile state.
+
+- **Handle-Indexed (`IndexedEntity` / `AppEntity`):** Static sensor metadata and logical identities (e.g., node UUID, `LocationLabel`, `DeviceName`) are indexed via Spotlight (`CSUserQuery` / CoreSpotlight) for fast retrieval. Only the stable handle is pushed to the index — the entity `id` is the node UUID with no timestamp.
+- **Value-Live Evaluation:** Live environmental values (`temperature`, `humidity`, `pressureHPa`, freshness) MUST NOT be indexed as static search-string properties. Selecting or querying an indexed entity instead resolves values dynamically at invocation time by fetching the current reading from `CricketCore` (§8.3), always emitting freshness disclosure — never returning a cached value as if fresh.
+
+```swift
+// Handle-Indexed / Value-Live. Only the stable node handle is indexed;
+// live values are resolved on demand and never stored on the entity.
+struct SensorNodeEntity: AppEntity, IndexedEntity {
+    var id: String                               // node UUID — stable handle, no timestamp
+
+    @Property(title: "Sensor Name")
+    var name: String
+
+    // Computed statics — a stored mutable static trips Swift 6.2 strict concurrency.
+    // (TypeDisplayRepresentation has no systemImage: init; string literal only.)
+    static var typeDisplayRepresentation: TypeDisplayRepresentation { "Cricket Sensor" }
+    static var defaultQuery: SensorNodeQuery { SensorNodeQuery() }
+
+    var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(name)") }
+
+    // IndexedEntity: only the stable handle is pushed to Spotlight — never live values.
+    // Note: @Property here carries NO indexingKey:/customIndexingKey: — those variants push
+    // a value into the index and must stay OFF for temp/humidity/pressure/freshness fields.
+    var attributeSet: CSSearchableItemAttributeSet {
+        // init(contentType: UTType) — requires `import UniformTypeIdentifiers`.
+        let set = CSSearchableItemAttributeSet(contentType: .item)
+        set.displayName = name
+        return set
+    }
+}
+
+// EntityStringQuery supports natural-language matching (e.g. "garden pressure").
+struct SensorNodeQuery: EntityStringQuery {
+    func entities(for ids: [String]) async throws -> [SensorNodeEntity] { /* ... */ }
+    func entities(matching string: String) async throws -> [SensorNodeEntity] { /* NL match */ }
+}
+```
+
+Live values are resolved separately at invocation time by the reading intent/tool (§8.4) from `CricketCore`, returned with §8.3 freshness disclosure — they are never members of, or indexed by, this entity.
+
+#### 8.6.2 Freshness & Privacy Constraints
+
+1. **No Background Pollution:** Sensor readings must never be pushed to Spotlight background indices without explicit user action or an active connection event.
+2. **Freshness Disclosure:** Any Spotlight-triggered intent action that outputs sensor metrics MUST pass through the standard §8.3 freshness evaluation pipeline before presenting safety conclusions to the user.
+
+#### 8.6.3 SDK Verification Status
+
+The AppIntents surface used here (`IndexedEntity` + `attributeSet`/`hideInSpotlight`, `@Property` variants, `EntityStringQuery`, computed `typeDisplayRepresentation`/`defaultQuery`) is verified against the iOS 27.0 AppIntents `.swiftinterface` (Xcode 27 beta 4, 2026-07-22). The CoreSpotlight initializer is verified against the iOS 27.0 CoreSpotlight headers (2026-07-23): use `CSSearchableItemAttributeSet(contentType: UTType)` (`import UniformTypeIdentifiers`); the older `init(itemContentType: String)` is deprecated. No open SDK-verification items remain for §8.6.
 
 ---
 
@@ -532,7 +596,7 @@ Phase 0 is listed first because freshness is the foundation for trust. The produ
 |---|---|---|
 | SDD-1 | Exact iOS 27 App Intent schema API names | ✅ RESOLVED — macros are `@AssistantEntity(schema:)` / `@AssistantIntent(schema:)`; not adopted in v1 (see SDD-2). |
 | SDD-2 | Whether an environmental schema exists | ✅ RESOLVED — none exists in iOS 27. v1 uses generic `AppEntity`/`AppIntent` (§8.2). |
-| SDD-3 | Pressure | Excluded from v1 per SRS unless Bob reverses decision and sensor firmware supports it. |
+| SDD-3 | Pressure / motion | ✅ RESOLVED (reversed 2026-07-23) — added to `Reading` as **optional, source-capability-aware** fields (`pressureHPa`, `movementCount`), stored + disclosed, no agent features on them in v1 (§6.1, §3). Rev-2 needs NO external sensor (onboard LPS22HB + BMI270); RuuviTag supplies both free via advertisement. |
 | SDD-4 | Freshness threshold | Draft default is five minutes; tune later. |
 | SDD-5 | PCC routing heuristic | Start simple; tune with evaluations. PCC API confirmed public (§11.2); handle quota/network failure + on-device fallback. |
 | SDD-6 | On-screen entity association ("view annotations") | ✅ RESOLVED — `associateAppEntity(_:priority:)` + `SnippetIntent`/`ShowsSnippetView` confirmed; in scope for v1 (§8.5). |
