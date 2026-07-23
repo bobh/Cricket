@@ -77,11 +77,27 @@ public final class CricketCore {
 
     /// Accept a new, already-validated reading. The feed is responsible for sentinel
     /// filtering (FR-3) before calling this.
+    ///
+    /// When multiple sources are live, a source-priority rule applies (prefer RuuviTag;
+    /// fall back to Arduino only when the current higher-priority reading has gone stale).
+    /// A reading always marks the link connected even if it loses arbitration.
     public func ingest(_ reading: Reading) {
-        latest = reading
         lastWasSensorError = false
         if linkState != .connected { linkState = .connected }
+        guard shouldReplaceLatest(with: reading) else { return }
+        latest = reading
         persistence?.save(reading)     // keep the out-of-process intent path warm
+    }
+
+    /// Source-arbitration policy (see `SensorSource.priority`).
+    private func shouldReplaceLatest(with incoming: Reading) -> Bool {
+        guard let current = latest else { return true }
+        // Same or higher priority always wins (Ruuvi > Arduino; same source = update).
+        if incoming.source.priority >= current.source.priority { return true }
+        // Lower-priority source (Arduino under a live Ruuvi): accept only as a fallback,
+        // once the current higher-priority reading is stale.
+        let currentAge = Duration.seconds(now().timeIntervalSince(current.timestamp))
+        return currentAge > freshnessThreshold
     }
 
     /// Report a link-state transition (e.g. from CBManagerState handling).

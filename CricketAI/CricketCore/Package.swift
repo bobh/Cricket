@@ -17,9 +17,13 @@ let package = Package(
     ],
     products: [
         .library(name: "CricketCore", targets: ["CricketCore"]),
+        .library(name: "CricketBLE", targets: ["CricketBLE"]),
     ],
     targets: [
         .target(name: "CricketCore"),
+        // CoreBluetooth SensorFeed conformers. iOS-only surfaces (state restoration,
+        // UIKit lifecycle) are #if-guarded so the target still compiles on the macOS host.
+        .target(name: "CricketBLE", dependencies: ["CricketCore"]),
         .testTarget(name: "CricketCoreTests", dependencies: ["CricketCore"]),
     ]
 )
