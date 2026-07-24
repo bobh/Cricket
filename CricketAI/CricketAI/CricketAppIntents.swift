@@ -1,15 +1,17 @@
 //
 //  CricketAppIntents.swift
-//  Cricket
+//  CricketAI
 //
-//  App Intents for Siri and Shortcuts integration
-//  Apple Intelligence-optimized with AppEntity and AppEnum implementations
-//  Enables natural language queries and complex Shortcuts automation
+//  App Intents for Siri and Shortcuts. Readings come from CricketCore (the single source
+//  of truth) via the shared App Group last-known store, so an intent invoked out-of-process
+//  still answers with the most recent reading AND discloses its freshness (never a bare,
+//  undisclosed value). No more direct UserDefaults string parsing.
 //
 
 import AppIntents
 import Foundation
 import AVFoundation
+import CricketCore
 
 #if os(macOS)
 import AppKit
@@ -165,69 +167,83 @@ struct SensorStatusQuery: EntityQuery {
     }
 }
 
-// MARK: - Helper Functions
+// MARK: - CricketCore access (shared last-known reading, freshness-aware)
+
+/// A transient CricketCore over the shared App Group store. Warm-starts from the
+/// last-known reading the live app persisted, and classifies it fresh/stale/unavailable
+/// against the current time — the correct out-of-process read path (DR-0 / FR-6).
+@MainActor
+private func currentConditions() -> ReadingResult {
+    CricketCore(persistence: AppGroupReadingStore()).currentConditions()
+}
+
+private func appIntentSensorType(_ source: SensorSource) -> SensorType {
+    source == .arduino ? .arduino : .ruuviTag
+}
+
+/// Human-facing explanation when no reading can be served.
+private func unavailableMessage(_ result: ReadingResult) -> String {
+    guard case .unavailable(let reason) = result else { return "No sensor data available." }
+    switch reason {
+    case .neverConnected:        return "CricketAI hasn't received a reading from a sensor yet."
+    case .disconnected:          return "The sensor is disconnected."
+    case .bluetoothOff:          return "Bluetooth is off. Turn it on in Settings to reach the sensor."
+    case .bluetoothUnauthorized: return "CricketAI isn't allowed to use Bluetooth. Check Privacy settings."
+    case .bluetoothUnsupported:  return "This device doesn't support Bluetooth Low Energy."
+    case .sensorError:           return "The sensor reported an error."
+    }
+}
+
+/// Freshness qualifier appended to a spoken reading (AB-4). Empty when the reading is live.
+private func freshnessSuffix(_ result: ReadingResult) -> String {
+    if case .stale = result { return ", though that reading was \(result.freshnessNote)" }
+    return ""
+}
+
+// MARK: - Helper Functions (entity builders for query suggestions)
 
 @MainActor
 func getCurrentTemperatureReading() async throws -> TemperatureReading? {
-    let defaults = UserDefaults.standard
-    guard let temperatureString = defaults.string(forKey: "currentTemperature"),
-          temperatureString != "--",
-          let celsiusValue = Double(temperatureString.components(separatedBy: " ").first ?? "") else {
-        return nil
-    }
-
-    let fahrenheitValue = celsiusValue * 9.0 / 5.0 + 32.0
-    let sensorSource = defaults.string(forKey: "sensorSource") ?? "BLE"
-    let sensorType: SensorType = sensorSource == "BLE" ? .arduino : .ruuviTag
-
+    guard let reading = currentConditions().reading else { return nil }
     return TemperatureReading(
-        id: UUID(),
-        celsius: celsiusValue,
-        fahrenheit: fahrenheitValue,
-        timestamp: Date(),
-        sensorType: sensorType,
-        rawValue: temperatureString
+        id: reading.id,
+        celsius: reading.celsius,
+        fahrenheit: reading.fahrenheit,
+        timestamp: reading.timestamp,
+        sensorType: appIntentSensorType(reading.source),
+        rawValue: String(format: "%.1f °C", reading.celsius)
     )
 }
 
 @MainActor
 func getCurrentHumidityReading() async throws -> HumidityReading? {
-    let defaults = UserDefaults.standard
-    guard let humidityString = defaults.string(forKey: "currentHumidity"),
-          humidityString != "--",
-          let humidityValue = Double(humidityString.components(separatedBy: " ").first ?? "") else {
-        return nil
-    }
-
-    let sensorSource = defaults.string(forKey: "sensorSource") ?? "BLE"
-    let sensorType: SensorType = sensorSource == "BLE" ? .arduino : .ruuviTag
-
+    guard let reading = currentConditions().reading else { return nil }
     return HumidityReading(
-        id: UUID(),
-        relativeHumidity: humidityValue,
-        timestamp: Date(),
-        sensorType: sensorType,
-        rawValue: humidityString
+        id: reading.id,
+        relativeHumidity: reading.relativeHumidity,
+        timestamp: reading.timestamp,
+        sensorType: appIntentSensorType(reading.source),
+        rawValue: String(format: "%.1f %%", reading.relativeHumidity)
     )
 }
 
 @MainActor
 func getCurrentSensorStatus() async throws -> SensorStatus? {
-    let defaults = UserDefaults.standard
-    let statusMessage = defaults.string(forKey: "connectionStatus") ?? "Unknown"
-    let sensorSource = defaults.string(forKey: "sensorSource") ?? "BLE"
-    let sensorType: SensorType = sensorSource == "BLE" ? .arduino : .ruuviTag
-
-    let isConnected = statusMessage.lowercased().contains("connected") ||
-                     statusMessage.lowercased().contains("receiving")
-
-    return SensorStatus(
-        id: UUID(),
-        sensorType: sensorType,
-        isConnected: isConnected,
-        statusMessage: statusMessage,
-        lastUpdate: Date()
-    )
+    let result = currentConditions()
+    switch result {
+    case .fresh(let reading):
+        return SensorStatus(id: UUID(), sensorType: appIntentSensorType(reading.source),
+                            isConnected: true, statusMessage: "Connected — live reading",
+                            lastUpdate: reading.timestamp)
+    case .stale(let reading, _):
+        return SensorStatus(id: UUID(), sensorType: appIntentSensorType(reading.source),
+                            isConnected: true, statusMessage: "Stale — \(result.freshnessNote)",
+                            lastUpdate: reading.timestamp)
+    case .unavailable:
+        return SensorStatus(id: UUID(), sensorType: .arduino,
+                            isConnected: false, statusMessage: unavailableMessage(result),
+                            lastUpdate: nil)
+    }
 }
 
 func playCricketChirp() {
@@ -236,13 +252,10 @@ func playCricketChirp() {
     }
 
     #if os(macOS)
-    // macOS uses NSSound
     if let sound = NSSound(contentsOf: soundURL, byReference: false) {
         sound.play()
-        // Removed Thread.sleep to prevent 800ms blocking delay for OpenClaw integration
     }
     #elseif os(iOS)
-    // iOS uses AVAudioSession
     do {
         let audioSession = AVAudioSession.sharedInstance()
         try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
@@ -252,8 +265,6 @@ func playCricketChirp() {
         player.prepareToPlay()
         player.play()
 
-        // Removed Thread.sleep to prevent 800ms blocking delay for OpenClaw integration
-
         try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
     } catch {
         // Silent failure for production
@@ -261,15 +272,15 @@ func playCricketChirp() {
     #endif
 }
 
-// MARK: - Enhanced App Intents
+// MARK: - App Intents
 
 struct GetLocalTemperatureIntent: AppIntent {
     static var title: LocalizedStringResource = "Get Local Temperature"
 
     static var description = IntentDescription(
-        "Retrieves the current temperature reading from your Cricket environmental sensor. Supports both Arduino BLE and RuuviTag sensors with automatic unit conversion between Celsius and Fahrenheit.",
+        "Retrieves the current temperature from your Cricket environmental sensor in the room. Discloses how recent the reading is.",
         categoryName: "Weather & Environment",
-        searchKeywords: ["temperature", "temp", "weather", "environment", "climate", "room temperature", "indoor temperature", "thermometer"]
+        searchKeywords: ["temperature", "temp", "environment", "climate", "room temperature", "indoor temperature", "thermometer"]
     )
 
     static var openAppWhenRun: Bool = true
@@ -285,16 +296,19 @@ struct GetLocalTemperatureIntent: AppIntent {
     func perform() async throws -> some IntentResult & ReturnsValue<TemperatureReading> & ProvidesDialog {
         playCricketChirp()
 
-        guard let reading = try await getCurrentTemperatureReading() else {
-            throw AppIntentError.noData("No temperature data available from your sensor. Please ensure your sensor is connected and transmitting data.")
+        let result = currentConditions()
+        guard let reading = result.reading else {
+            throw AppIntentError.noData(unavailableMessage(result))
         }
 
-        let message = formatTemperatureMessage(reading: reading, unit: unit)
-
-        return .result(
-            value: reading,
-            dialog: IntentDialog(stringLiteral: message)
+        let entity = TemperatureReading(
+            id: reading.id, celsius: reading.celsius, fahrenheit: reading.fahrenheit,
+            timestamp: reading.timestamp, sensorType: appIntentSensorType(reading.source),
+            rawValue: String(format: "%.1f °C", reading.celsius)
         )
+        let message = formatTemperatureMessage(reading: entity, unit: unit) + freshnessSuffix(result)
+
+        return .result(value: entity, dialog: IntentDialog(stringLiteral: message))
     }
 
     private func formatTemperatureMessage(reading: TemperatureReading, unit: TemperatureUnit) -> String {
@@ -313,7 +327,7 @@ struct GetLocalHumidityIntent: AppIntent {
     static var title: LocalizedStringResource = "Get Local Humidity"
 
     static var description = IntentDescription(
-        "Retrieves the current relative humidity reading from your Cricket environmental sensor. Useful for monitoring indoor air quality, comfort levels, and environmental conditions.",
+        "Retrieves the current relative humidity from your Cricket environmental sensor in the room. Discloses how recent the reading is.",
         categoryName: "Weather & Environment",
         searchKeywords: ["humidity", "moisture", "relative humidity", "air quality", "environment", "indoor humidity", "hygrometer"]
     )
@@ -326,33 +340,30 @@ struct GetLocalHumidityIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<HumidityReading> & ProvidesDialog {
-        guard let reading = try await getCurrentHumidityReading() else {
-            throw AppIntentError.noData("No humidity data available from your sensor. Please ensure your sensor is connected and transmitting data.")
+        let result = currentConditions()
+        guard let reading = result.reading else {
+            throw AppIntentError.noData(unavailableMessage(result))
         }
 
-        let comfortLevel = getComfortLevel(humidity: reading.relativeHumidity)
-        let message = "Your local humidity is \(String(format: "%.1f", reading.relativeHumidity)) percent\(comfortLevel)"
-
-        return .result(
-            value: reading,
-            dialog: IntentDialog(stringLiteral: message)
+        let entity = HumidityReading(
+            id: reading.id, relativeHumidity: reading.relativeHumidity,
+            timestamp: reading.timestamp, sensorType: appIntentSensorType(reading.source),
+            rawValue: String(format: "%.1f %%", reading.relativeHumidity)
         )
+        let comfortLevel = getComfortLevel(humidity: reading.relativeHumidity)
+        let message = "Your local humidity is \(String(format: "%.1f", reading.relativeHumidity)) percent\(comfortLevel)" + freshnessSuffix(result)
+
+        return .result(value: entity, dialog: IntentDialog(stringLiteral: message))
     }
 
     private func getComfortLevel(humidity: Double) -> String {
         switch humidity {
-        case 0..<30:
-            return ", which is quite dry"
-        case 30..<40:
-            return ", which is comfortable but slightly dry"
-        case 40..<60:
-            return ", which is ideal for comfort"
-        case 60..<70:
-            return ", which is comfortable but slightly humid"
-        case 70...:
-            return ", which is quite humid"
-        default:
-            return ""
+        case 0..<30:  return ", which is quite dry"
+        case 30..<40: return ", which is comfortable but slightly dry"
+        case 40..<60: return ", which is ideal for comfort"
+        case 60..<70: return ", which is comfortable but slightly humid"
+        case 70...:   return ", which is quite humid"
+        default:      return ""
         }
     }
 }
@@ -361,9 +372,9 @@ struct GetWorkshopConditionsIntent: AppIntent {
     static var title: LocalizedStringResource = "Get Workshop Conditions"
 
     static var description = IntentDescription(
-        "Retrieves both temperature and humidity readings from your Cricket environmental sensor in a single query. Perfect for workshop monitoring and environmental condition checks.",
+        "Retrieves both temperature and humidity from your Cricket environmental sensor in the room, and discloses how recent the reading is.",
         categoryName: "Weather & Environment",
-        searchKeywords: ["workshop", "conditions", "temperature", "humidity", "environment", "both", "all sensors"]
+        searchKeywords: ["workshop", "conditions", "temperature", "humidity", "environment", "both"]
     )
 
     static var openAppWhenRun: Bool = false
@@ -374,18 +385,15 @@ struct GetWorkshopConditionsIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
-        guard let tempReading = try await getCurrentTemperatureReading(),
-              let humidityReading = try await getCurrentHumidityReading() else {
-            throw AppIntentError.noData("No sensor data available. Please ensure your sensor is connected and transmitting data.")
+        let result = currentConditions()
+        guard let reading = result.reading else {
+            throw AppIntentError.noData(unavailableMessage(result))
         }
 
-        let sensorName = tempReading.sensorType == .arduino ? "Arduino" : "RuuviTag"
-        let message = "Temperature: \(String(format: "%.1f", tempReading.celsius))°C, Humidity: \(String(format: "%.1f", humidityReading.relativeHumidity))%, Source: \(sensorName)"
+        let sensorName = reading.source == .arduino ? "Arduino" : "RuuviTag"
+        let message = "Temperature: \(String(format: "%.1f", reading.celsius))°C, Humidity: \(String(format: "%.1f", reading.relativeHumidity))%, Source: \(sensorName)" + freshnessSuffix(result)
 
-        return .result(
-            value: message,
-            dialog: IntentDialog(stringLiteral: message)
-        )
+        return .result(value: message, dialog: IntentDialog(stringLiteral: message))
     }
 }
 
@@ -393,7 +401,7 @@ struct GetSensorStatusIntent: AppIntent {
     static var title: LocalizedStringResource = "Get Sensor Status"
 
     static var description = IntentDescription(
-        "Checks the connection and operational status of your Cricket environmental sensor. Displays whether the sensor is connected, scanning, or experiencing issues.",
+        "Checks the connection and freshness status of your Cricket environmental sensor.",
         categoryName: "Device Status",
         searchKeywords: ["sensor", "status", "connection", "connected", "bluetooth", "BLE", "device status"]
     )
@@ -410,13 +418,11 @@ struct GetSensorStatusIntent: AppIntent {
             throw AppIntentError.noData("Unable to retrieve sensor status information.")
         }
 
-        let sensorName = status.sensorType == .arduino ? "Arduino" : "RuuviTag"
-        let message = "Your \(sensorName) sensor is: \(status.statusMessage)"
+        let message = status.isConnected
+            ? "\(status.sensorType.rawValue == "BLE" ? "Arduino" : "RuuviTag") sensor: \(status.statusMessage)"
+            : status.statusMessage
 
-        return .result(
-            value: status,
-            dialog: IntentDialog(stringLiteral: message)
-        )
+        return .result(value: status, dialog: IntentDialog(stringLiteral: message))
     }
 }
 

@@ -1,259 +1,89 @@
 //
 //  ContentView.swift
-//  CricketIOS
+//  CricketAI
+//
+//  Observes the single CricketCore source of truth. Source selection is automatic
+//  (RuuviTag preferred, Arduino fallback) via CricketCore arbitration — no manual toggle.
+//  Freshness is disclosed honestly: fresh / stale-with-age / unavailable-with-reason.
 //
 
 import SwiftUI
-import WidgetKit
+import CricketCore
 
 struct ContentView: View {
-    // Sensor source selection
-    @AppStorage("sensorSource") private var sensorSource: String = "BLE"
-
-    // View Models - both Arduino BLE and RuuviTag
-    @State private var bluetoothViewModel = BluetoothViewModel()
-    @State private var ruuviViewModel = RuuviTagViewModel()
-
-    // UI State
-    @State private var showSettings = false
-
-    private let sharedDefaults = UserDefaults(suiteName: "group.wm6h.CricketAI")
+    @Environment(CricketRuntime.self) private var runtime
     @AppStorage("useFahrenheit") private var useFahrenheit: Bool = false
 
-    // Helper function to switch sensor sources
-    private func changeSensorSource(_ newSource: String) {
-        sensorSource = newSource
-        bluetoothViewModel.isActiveSource = (newSource == "BLE")
-        ruuviViewModel.isActiveSource = (newSource == "Ruuvi")
-        sharedDefaults?.set(newSource, forKey: "sensorSource")
-    }
+    // MARK: - Derived state
 
-    var currentTemperature: String {
-        sensorSource == "BLE" ? bluetoothViewModel.temperature : ruuviViewModel.temperature
-    }
+    private var result: ReadingResult { runtime.core.currentConditions() }
 
-    var currentTemperatureFahrenheit: String {
-        let tempString = currentTemperature
-        guard let celsiusValue = Double(tempString.components(separatedBy: " ").first ?? "") else {
-            return "--"
-        }
-        let fahrenheit = celsiusValue * 9.0 / 5.0 + 32.0
-        return String(format: "%.0f", fahrenheit)
-    }
-
-    var currentHumidity: String {
-        sensorSource == "BLE" ? bluetoothViewModel.humidity : ruuviViewModel.humidity
-    }
-
-    var currentStatus: String {
-        sensorSource == "BLE" ? bluetoothViewModel.connectionStatus : ruuviViewModel.connectionStatus
-    }
-
-    var statusColor: Color {
-        if currentStatus.contains("Connected") || currentStatus.contains("Receiving") {
-            return DesignColor.statusOK
-        } else if currentStatus.contains("Scanning") || currentStatus.contains("Connecting") {
-            return DesignColor.statusWarning
-        } else {
-            return DesignColor.statusError
+    private var statusText: String {
+        switch result {
+        case .fresh:                 return "Live reading"
+        case .stale:                 return "Stale reading"
+        case .unavailable(let r):    return message(for: r)
         }
     }
 
-    var statusLEDMode: LEDMode {
-        if currentStatus.contains("Connected") {
-            return .on
-        } else if currentStatus.contains("Scanning") || currentStatus.contains("Connecting") {
-            return .blink
-        } else {
-            return .off
+    private var freshnessNote: String { result.freshnessNote }
+
+    private var statusLED: (color: LEDColor, mode: LEDMode) {
+        switch result {
+        case .fresh:        return (.green, .on)
+        case .stale:        return (.amber, .blink)
+        case .unavailable:  return (.red, .off)
         }
     }
 
-    private var lastUpdatedText: String {
-        let date = sensorSource == "BLE" ? bluetoothViewModel.lastUpdated : ruuviViewModel.lastUpdated
-        guard let date = date else { return "Last updated: --" }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .medium
-        return "Last updated: \(formatter.string(from: date))"
+    private var statusColor: Color {
+        switch result {
+        case .fresh:        return DesignColor.statusOK
+        case .stale:        return DesignColor.statusWarning
+        case .unavailable:  return DesignColor.statusError
+        }
     }
+
+    private var sourceLabel: String {
+        switch result.reading?.source {
+        case .arduino:  return "Arduino Nano 33 Sense Rev 2"
+        case .ruuvi:    return "RuuviTag"
+        case nil:       return "No sensor"
+        }
+    }
+
+    private func message(for reason: UnavailableReason) -> String {
+        switch reason {
+        case .neverConnected:       return "Waiting for first reading…"
+        case .disconnected:         return "Sensor disconnected"
+        case .bluetoothOff:         return "Bluetooth is off"
+        case .bluetoothUnauthorized:return "Bluetooth access denied"
+        case .bluetoothUnsupported: return "Bluetooth LE not supported"
+        case .sensorError:          return "Sensor error"
+        }
+    }
+
+    private func primaryTemp(_ reading: Reading) -> String {
+        useFahrenheit ? String(format: "%.0f °F", reading.fahrenheit)
+                      : String(format: "%.1f °C", reading.celsius)
+    }
+
+    private func secondaryTemp(_ reading: Reading) -> String {
+        useFahrenheit ? String(format: "%.1f °C", reading.celsius)
+                      : String(format: "%.0f °F", reading.fahrenheit)
+    }
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Header
-                    VStack(spacing: 8) {
-                        Image(systemName: "thermometer.medium")
-                            .font(.system(size: 40))
-                            .foregroundStyle(DesignColor.brandBlue)
-
-                        Text("Cricket")
-                            .font(.largeTitle)
-                            .bold()
-
-                        Text("Hyperlocal Monitoring")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.top)
-
-                    // Status Header
-                    HStack(spacing: 12) {
-                        LEDView(
-                            color: statusColor == DesignColor.statusOK ? .green : (statusColor == DesignColor.statusWarning ? .amber : .red),
-                            mode: statusLEDMode,
-                            size: 16
-                        )
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(currentStatus)
-                                .font(.headline)
-                                .foregroundStyle(statusColor)
-
-                            Text(sensorSource == "BLE" ? "Arduino Nano 33 Sense Rev 2" : "RuuviTag")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            Text(lastUpdatedText)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-                    }
-                    .padding()
-                    .background(DesignColor.cardBackground)
-                    .clipShape(.rect(cornerRadius: 12))
-                    .padding(.horizontal)
-
-                    // Main Readings
-                    VStack(spacing: 16) {
-                        // Temperature Card
-                        VStack(spacing: 16) {
-                            Image(systemName: "thermometer.medium")
-                                .font(.system(size: 50))
-                                .foregroundStyle(DesignColor.brandOrange)
-
-                            VStack(alignment: .center, spacing: 4) {
-                                Text("Temperature")
-                                    .font(DesignFont.label())
-                                    .foregroundStyle(.secondary)
-
-                                VStack(alignment: .center, spacing: 8) {
-                                    Text(useFahrenheit
-                                         ? (currentTemperatureFahrenheit == "--" ? "--" : "\(currentTemperatureFahrenheit) °F")
-                                         : currentTemperature)
-                                        .font(DesignFont.readingXL())
-                                        .foregroundStyle(.primary)
-
-                                    Text(useFahrenheit ? currentTemperature
-                                         : (currentTemperatureFahrenheit == "--" ? "--" : "\(currentTemperatureFahrenheit) °F"))
-                                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(32)
-                        .background(DesignColor.cardBackground)
-                        .clipShape(.rect(cornerRadius: 16))
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Temperature")
-                        .accessibilityValue("\(currentTemperature), \(currentTemperatureFahrenheit) degrees Fahrenheit")
-
-                        // Humidity Card
-                        VStack(spacing: 16) {
-                            Image(systemName: "humidity.fill")
-                                .font(.system(size: 50))
-                                .foregroundStyle(DesignColor.brandBlue)
-
-                            VStack(alignment: .center, spacing: 4) {
-                                Text("Humidity")
-                                    .font(DesignFont.label())
-                                    .foregroundStyle(.secondary)
-
-                                Text(currentHumidity)
-                                    .font(DesignFont.readingXL())
-                                    .foregroundStyle(.primary)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(32)
-                        .background(DesignColor.cardBackground)
-                        .clipShape(.rect(cornerRadius: 16))
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Humidity")
-                        .accessibilityValue(currentHumidity)
-                    }
-                    .padding(.horizontal)
-
-                    // Info Cards
-                    VStack(spacing: 16) {
-                        InfoCard(
-                            icon: "info.circle.fill",
-                            title: "Hyperlocal Data",
-                            description: "These readings are from your immediate environment, not a distant weather station.",
-                            color: DesignColor.brandGreen
-                        )
-
-                        InfoCard(
-                            icon: "chart.line.uptrend.xyaxis",
-                            title: "Real-Time Monitoring",
-                            description: "Data updates automatically as your sensor transmits new readings.",
-                            color: DesignColor.brandBlue
-                        )
-
-                        InfoCard(
-                            icon: "hammer.fill",
-                            title: sensorSource == "BLE" ? "DIY Built" : "Commercial Sensor",
-                            description: sensorSource == "BLE" ? "You built this sensor yourself using Arduino Nano 33 Sense Rev 2." : "High-quality RuuviTag environmental sensor.",
-                            color: DesignColor.brandOrange
-                        )
-                    }
-                    .padding(.horizontal)
-
+                    header
+                    statusCard
+                    readings
+                    infoCards
                     Spacer(minLength: 20)
-
-                    // Sensor Switcher
-                    VStack(spacing: 12) {
-                        Text("Sensor Source")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        HStack(spacing: 16) {
-                            Button(action: { changeSensorSource("BLE") }) {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "hammer.fill")
-                                        .font(.system(size: 30))
-                                        .foregroundStyle(sensorSource == "BLE" ? .white : DesignColor.brandBlue)
-                                        .padding()
-                                        .background(sensorSource == "BLE" ? DesignColor.brandBlue : Color.clear)
-                                        .clipShape(.rect(cornerRadius: 12))
-                                    Text("Arduino DIY")
-                                        .font(.caption)
-                                        .foregroundStyle(.primary)
-                                }
-                            }
-                            .buttonStyle(.plain)
-
-                            Button(action: { changeSensorSource("Ruuvi") }) {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "antenna.radiowaves.left.and.right")
-                                        .font(.system(size: 30))
-                                        .foregroundStyle(sensorSource == "Ruuvi" ? .white : DesignColor.brandGreen)
-                                        .padding()
-                                        .background(sensorSource == "Ruuvi" ? DesignColor.brandGreen : Color.clear)
-                                        .clipShape(.rect(cornerRadius: 12))
-                                    Text("RuuviTag")
-                                        .font(.caption)
-                                        .foregroundStyle(.primary)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.bottom)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -261,33 +91,122 @@ struct ContentView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         useFahrenheit.toggle()
-                        sharedDefaults?.set(useFahrenheit, forKey: "useFahrenheit")
-                        WidgetCenter.shared.reloadAllTimelines()
                     } label: {
-                        Text(useFahrenheit ? "°C" : "°F")
-                            .font(.headline)
+                        Text(useFahrenheit ? "°C" : "°F").font(.headline)
                     }
                 }
             }
-            .onAppear {
-                bluetoothViewModel.isActiveSource = (sensorSource == "BLE")
-                ruuviViewModel.isActiveSource = (sensorSource == "Ruuvi")
-                sharedDefaults?.set(sensorSource, forKey: "sensorSource")
-                sharedDefaults?.set(useFahrenheit, forKey: "useFahrenheit")
+        }
+    }
 
-                if sensorSource == "BLE" {
-                    bluetoothViewModel.startScanning()
+    private var header: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "thermometer.medium")
+                .font(.system(size: 40))
+                .foregroundStyle(DesignColor.brandBlue)
+            Text("Cricket").font(.largeTitle).bold()
+            Text("Hyperlocal Monitoring")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top)
+    }
+
+    private var statusCard: some View {
+        HStack(spacing: 12) {
+            LEDView(color: statusLED.color, mode: statusLED.mode, size: 16)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(statusText).font(.headline).foregroundStyle(statusColor)
+                Text(sourceLabel).font(.caption).foregroundStyle(.secondary)
+                Text(freshnessNote).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding()
+        .background(DesignColor.cardBackground)
+        .clipShape(.rect(cornerRadius: 12))
+        .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private var readings: some View {
+        VStack(spacing: 16) {
+            // Temperature
+            VStack(spacing: 16) {
+                Image(systemName: "thermometer.medium")
+                    .font(.system(size: 50))
+                    .foregroundStyle(DesignColor.brandOrange)
+                VStack(spacing: 4) {
+                    Text("Temperature")
+                        .font(DesignFont.label())
+                        .foregroundStyle(.secondary)
+                    VStack(spacing: 8) {
+                        Text(result.reading.map(primaryTemp) ?? "--")
+                            .font(DesignFont.readingXL())
+                            .foregroundStyle(.primary)
+                        Text(result.reading.map(secondaryTemp) ?? "--")
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
-            .onChange(of: sensorSource) { oldValue, newValue in
-                if oldValue == "Ruuvi" && newValue == "BLE" {
-                    bluetoothViewModel.showResetMessage()
+            .frame(maxWidth: .infinity)
+            .padding(32)
+            .background(DesignColor.cardBackground)
+            .clipShape(.rect(cornerRadius: 16))
+
+            // Humidity
+            VStack(spacing: 16) {
+                Image(systemName: "humidity.fill")
+                    .font(.system(size: 50))
+                    .foregroundStyle(DesignColor.brandBlue)
+                VStack(spacing: 4) {
+                    Text("Humidity")
+                        .font(DesignFont.label())
+                        .foregroundStyle(.secondary)
+                    Text(result.reading.map { String(format: "%.1f %%", $0.relativeHumidity) } ?? "--")
+                        .font(DesignFont.readingXL())
+                        .foregroundStyle(.primary)
                 }
-                if newValue == "BLE" {
-                    bluetoothViewModel.startScanning()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(32)
+            .background(DesignColor.cardBackground)
+            .clipShape(.rect(cornerRadius: 16))
+
+            // Optional metrics (disclosed only when the source supplies them)
+            if let reading = result.reading, reading.hasPressure || reading.hasMotion {
+                HStack(spacing: 24) {
+                    if let hpa = reading.pressureHPa {
+                        Label(String(format: "%.0f hPa", hpa), systemImage: "gauge.with.dots.needle.bottom.50percent")
+                    }
+                    if let motion = reading.movementCount {
+                        Label("\(motion)", systemImage: "move.3d")
+                    }
                 }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
         }
+        .padding(.horizontal)
+    }
+
+    private var infoCards: some View {
+        VStack(spacing: 16) {
+            InfoCard(
+                icon: "info.circle.fill",
+                title: "Hyperlocal Data",
+                description: "These readings are from your immediate environment, not a distant weather station.",
+                color: DesignColor.brandGreen
+            )
+            InfoCard(
+                icon: "chart.line.uptrend.xyaxis",
+                title: "Real-Time Monitoring",
+                description: "Data updates automatically as your sensor transmits new readings.",
+                color: DesignColor.brandBlue
+            )
+        }
+        .padding(.horizontal)
     }
 }
 
@@ -303,17 +222,10 @@ struct InfoCard: View {
                 .font(.title2)
                 .foregroundStyle(color)
                 .frame(width: 40)
-
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline)
-                    .bold()
-
-                Text(description)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text(title).font(.headline).bold()
+                Text(description).font(.subheadline).foregroundStyle(.secondary)
             }
-
             Spacer()
         }
         .padding()
@@ -324,4 +236,5 @@ struct InfoCard: View {
 
 #Preview {
     ContentView()
+        .environment(CricketRuntime())
 }

@@ -10,9 +10,13 @@ import AppIntents
 
 @main
 struct CricketAIApp: App {
+    @State private var runtime = CricketRuntime()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(runtime)
+                .onAppear { runtime.start() }
         }
     }
 }

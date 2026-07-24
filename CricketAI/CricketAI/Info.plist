@@ -40,5 +40,9 @@
 	</array>
 	<key>NSSiriUsageDescription</key>
 	<string>Cricket uses Siri to let you ask for temperature, humidity, and sensor status hands-free.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
 </dict>
 </plist>
