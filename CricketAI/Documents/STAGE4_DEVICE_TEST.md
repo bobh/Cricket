@@ -61,6 +61,18 @@ sections A/B with it once it arrives to validate the optional pressure/motion fi
 
 ---
 
+## I. Standalone / battery power (regression guard for the `while(!Serial)` fix)
+> Why this matters: the firmware used to have `while (!Serial) delay(10);` in `setup()`, which
+> blocked BLE from ever starting unless a computer held the serial port open — so on battery /
+> charger the Arduino never advertised and the iPhone couldn't find it. Fixed 2026-07-25
+> (commit `61a325c`); this section guards against a regression.
+> **Crucial:** during these tests the Mac's Serial Monitor / any serial connection to the
+> Arduino MUST be closed — that's the whole point (reproduce "no serial host"). Opening the
+> serial port masks the bug.
+- [ ] **I1 — On Mac USB, no serial monitor open:** Arduino plugged into the Mac but with NO Serial Monitor / `screen`/`head` session attached; power-cycle it (tap reset) → within a few seconds the iPhone shows "Connected to Arduino" with live readings. (This exact case used to hang forever.)
+- [ ] **I2 — Battery / charger only (detached from Mac):** power the Arduino from a battery or USB power bank/charger — NOT the Mac → it advertises, the iPhone connects, readings flow. This is the real deployment scenario.
+- [ ] **I3 — Cold-start on battery:** fully power-cycle on battery (no serial) → device comes up advertising within ~2–3 s (the bounded serial wait elapses, then BLE starts) and the iPhone (re)connects.
+
 ## If something fails — quick suspects
 - No connection at all → Bluetooth permission not granted, or Arduino not advertising the service UUID `5971E8F1-…`.
 - Intent says "no data" while the app shows a reading → App Group mismatch (`group.wm6h.CricketAI`) between the app and the intent's provisioning profile.
