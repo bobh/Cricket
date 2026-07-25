@@ -72,7 +72,12 @@ unsigned long startTime = 0;
 
 void setup() {
     Serial.begin(115200);
-    while (!Serial) delay(10);
+    // Wait briefly for a serial monitor, then continue regardless, so the sensor runs
+    // standalone (battery/charger/any power). Previously `while (!Serial) delay(10);`
+    // blocked BLE startup forever unless a computer held the serial port open — the
+    // device never advertised and no BLE central could find it.
+    unsigned long serialWaitStart = millis();
+    while (!Serial && millis() - serialWaitStart < 2000) delay(10);
 
     startTime = millis();
 
@@ -121,11 +126,21 @@ void setup() {
     }
     Serial.println("SUCCESS: BLE initialized");
 
-    BLE.setLocalName(DEVICE_NAME);
     environmentalService.addCharacteristic(temperatureChar);
     environmentalService.addCharacteristic(humidityChar);
     BLE.addService(environmentalService);
-    BLE.setAdvertisedService(environmentalService);
+
+    // A 128-bit service UUID (18 B) + the 16-char local name (18 B) + flags (3 B) = 39 B,
+    // which overflows the 31-byte advertising PDU and can cause ArduinoBLE to drop the
+    // service UUID — breaking the iPhone app's UUID-targeted scan. Keep the UUID in the
+    // advertising packet and move the name to the scan response so both always fit.
+    BLEAdvertisingData advData;
+    advData.setAdvertisedService(environmentalService);
+    BLE.setAdvertisingData(advData);
+
+    BLEAdvertisingData scanData;
+    scanData.setLocalName(DEVICE_NAME);
+    BLE.setScanResponseData(scanData);
 
     temperatureChar.writeValue(0.0);
     humidityChar.writeValue(0.0);
