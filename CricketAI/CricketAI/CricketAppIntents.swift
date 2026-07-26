@@ -283,7 +283,7 @@ struct GetLocalTemperatureIntent: AppIntent {
         searchKeywords: ["temperature", "temp", "environment", "climate", "room temperature", "indoor temperature", "thermometer"]
     )
 
-    static var openAppWhenRun: Bool = true
+    static var openAppWhenRun: Bool = false   // speak the reading hands-free in Siri; don't launch the app
 
     @Parameter(title: "Temperature Unit", description: "Choose the temperature unit to display", default: .both)
     var unit: TemperatureUnit
