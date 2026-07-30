@@ -417,6 +417,14 @@ The session instructions should include these rules:
 5. Use general model knowledge for domain reasoning, but ground current conditions in CricketAI data.
 6. If the local reading is unavailable, say so and provide only general guidance.
 
+**Draft grounding clause (verbatim, 2026-07-30) — belt-and-suspenders atop the hard enforcement.** A candidate literal `Instructions` string. Note it scopes the ban to fabricated *values*, NOT the model's reasoning (see §10.1 / AB-3 — the model should still reason with its own domain knowledge):
+
+> When you state any current temperature, humidity, or pressure for the user's location, that value must come from the environmental reading tool's latest result — never estimate, recall, or infer it from general knowledge, a weather service, or earlier in the conversation. If the tool hasn't been called, or returns a stale or unavailable result, say so plainly; do not present a substitute number as if it were current. You may use your own knowledge to reason and advise; only the sensor figures themselves are off-limits to invent.
+
+This clause is SOFT (a prompt can be ignored). The HARD guarantees remain: the discriminated `ReadingResult` (no bare number to fabricate from), `GenerationOptions.ToolCallingMode.required` on the environmental path, and the Phase-4 eval. Keep the clause as insurance, not the mechanism. Avoid undefined jargon in the wording (e.g. "Native Integration" — the model won't know what that means; name the tool/behavior).
+
+**A/B testing (deferred candidate):** the exact wording is a knob to tune, not a one-shot decision. Run variants of this clause (and with/without `.required`) through the Phase-4 eval harness on the positive/negative prompt set and compare tool-invocation rate, fabrication rate, and freshness-disclosure rate.
+
 ### 10.3 Acid-Test Behavior
 
 Prompt:
