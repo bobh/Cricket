@@ -447,6 +447,19 @@ Failure modes:
 - gives generic ESD advice without checking CricketAI
 - hides stale/unavailable state
 
+**Second flagship — "the Orchard Room test" (2026-08-08).** Same shape as the CMOS test (present-tense, safety judgment, grounded in the live reading, freshness disclosed) — orchids as the subject:
+
+> Is it safe in the Orchard Room right now?
+
+Required behavior:
+1. Call `ReadEnvironmentalConditions` for the Orchard Room sensor.
+2. Judge against the orchids' safe temperature/humidity bounds — user-configurable, with the model's orchid knowledge as the default (tolerances vary by type, e.g. Phalaenopsis vs Cattleya).
+3. Name the room and disclose freshness.
+4. If the reading is stale/unavailable, say so and withhold a false "all clear."
+5. No external weather/location/network access.
+
+Failure modes: same as the CMOS test. This needs only a room/site label + configurable orchid bounds — **no** historical logging — and rides the same milestone (Phase 2/3 reasoning tool + Phase-4 eval). The retrospective "…during my vacation" variant is parked in §20 (Future Direction).
+
 ---
 
 ## 11. Model Session and Escalation
@@ -542,6 +555,7 @@ Evaluation prompts should include:
 - "Should I open the windows?"
 - "Is it safe to solder in here?"
 - "Is it safe to work on CMOS devices right now?"
+- "Is it safe in the Orchard Room right now?"   (second flagship — §10.3; judge vs configured orchid bounds)
 - "Can I varnish my deck this afternoon?"
 - "Is this room okay for my guitar?"
 
@@ -644,4 +658,27 @@ All checked against `iPhoneOS27.0.sdk` (Xcode 27.0 beta 3, Swift 6.4). Full reco
 | Private Cloud Compute model (`PrivateCloudComputeLanguageModel`) | ✅ Present (quota/availability/failure types) — §11.2 |
 | Dynamic profile/instructions (`DynamicProfile`, `DynamicInstructions`, `DynamicProfileModifier`) | ✅ Present |
 | Evaluation suite API | ❌ None — evals are DIY Swift Testing; only `LanguageModelFeedback` exists (§13.3) |
+
+---
+
+## 20. Future Direction (parked — NOT v1)
+
+### 20.1 Retrospective environmental-protection queries
+Beyond the present-tense flagships (§10.3), a retrospective capability — e.g. *"did my orchids suffer any temperature or humidity compromise while I was away?"* — is desirable but **deferred**. Draft requirements:
+
+- **FR-R1 (flagship).** Answer whether a monitored site's temperature/humidity left its configured safe bounds over a user-specified past window, grounded in logged history, and disclose any interval with no data captured. MUST NOT report "no compromise" for time it did not observe.
+- **FR-R2 (capture).** A continuously-running, always-present logger AT THE SITE (not the iPhone, which may be away) records the time series into a queryable on-device store (SwiftData); coverage gaps are recorded, not skipped.
+- **FR-R3 (deterministic eval).** Violations (min/max, threshold crossings, durations) computed from logged data — never inferred by the model.
+- **FR-R4 (coverage disclosure).** The answer states findings AND the data coverage of the window.
+- **FR-R5 (window resolution).** Explicit `DateInterval`; "my vacation" from a user-supplied window or optional EventKit — never assumed.
+- **FR-R6 (bounds).** Safe bounds user-configurable per site/subject; the model's domain knowledge as default.
+
+### 20.2 Open risks gating the retrospective feature
+1. **Data-sync path UNDESIGNED** — how the always-present logger's history reaches the phone's queryable store (iCloud? home-network sync on return? Ruuvi gateway/cloud?). Without it there is nothing to query. Highest-priority open item; a cloud route would compromise the all-local story.
+2. **Freeform Siri routing** — system Siri reaches apps via App Intents (structured, app-name required); a freeform analytical question won't reliably route. Realistic delivery = structured app-named intent or in-app assistant.
+3. **"my vacation" resolution** — assistant/App schemas EXPOSE your app's data, they don't READ the system calendar (SDK-confirmed 2026-08-08: no consumer-side calendar/personal-context hook in AppIntents). Needs explicit dates or EventKit.
+4. **In-app FM surface vs "Siri only"** — the rich reasoning path needs a surface CricketAI drives; whether system Siri can invoke a third-party app's Foundation Models tools is unverified.
+
+### 20.3 Top-level "wife test" verdict (2026-08-08)
+The retrospective / freeform-voice version is **not** deliverable as literally phrased under the current SDD — gated on the four items in §20.2. The scoped present-tense form — *"is it safe in the Orchard Room right now?"* (§10.3, second flagship) — **is** reachable on the planned architecture (live reading + freshness + Phase 2/3 reasoning tool + Phase-4 eval) and is the committed target. It adds only a room/site label and configurable orchid bounds.
 
