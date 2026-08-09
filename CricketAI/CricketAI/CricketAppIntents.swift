@@ -81,7 +81,7 @@ struct TemperatureReading: AppEntity {
         )
     }
 
-    static var defaultQuery = TemperatureReadingQuery()
+    static let defaultQuery = TemperatureReadingQuery()
 }
 
 struct TemperatureReadingQuery: EntityQuery {
@@ -116,7 +116,7 @@ struct HumidityReading: AppEntity {
         )
     }
 
-    static var defaultQuery = HumidityReadingQuery()
+    static let defaultQuery = HumidityReadingQuery()
 }
 
 struct HumidityReadingQuery: EntityQuery {
@@ -151,7 +151,7 @@ struct SensorStatus: AppEntity {
         )
     }
 
-    static var defaultQuery = SensorStatusQuery()
+    static let defaultQuery = SensorStatusQuery()
 }
 
 struct SensorStatusQuery: EntityQuery {
@@ -275,15 +275,15 @@ func playCricketChirp() {
 // MARK: - App Intents
 
 struct GetLocalTemperatureIntent: AppIntent {
-    static var title: LocalizedStringResource = "Get Local Temperature"
+    static let title: LocalizedStringResource = "Get Local Temperature"
 
-    static var description = IntentDescription(
+    static let description = IntentDescription(
         "Retrieves the current temperature from your Cricket environmental sensor in the room. Discloses how recent the reading is.",
         categoryName: "Weather & Environment",
         searchKeywords: ["temperature", "temp", "environment", "climate", "room temperature", "indoor temperature", "thermometer"]
     )
 
-    static var openAppWhenRun: Bool = false   // speak the reading hands-free in Siri; don't launch the app
+    static let openAppWhenRun: Bool = false   // speak the reading hands-free in Siri; don't launch the app
 
     @Parameter(title: "Temperature Unit", description: "Choose the temperature unit to display", default: .both)
     var unit: TemperatureUnit
@@ -324,15 +324,15 @@ struct GetLocalTemperatureIntent: AppIntent {
 }
 
 struct GetLocalHumidityIntent: AppIntent {
-    static var title: LocalizedStringResource = "Get Local Humidity"
+    static let title: LocalizedStringResource = "Get Local Humidity"
 
-    static var description = IntentDescription(
+    static let description = IntentDescription(
         "Retrieves the current relative humidity from your Cricket environmental sensor in the room. Discloses how recent the reading is.",
         categoryName: "Weather & Environment",
         searchKeywords: ["humidity", "moisture", "relative humidity", "air quality", "environment", "indoor humidity", "hygrometer"]
     )
 
-    static var openAppWhenRun: Bool = false
+    static let openAppWhenRun: Bool = false
 
     static var parameterSummary: some ParameterSummary {
         Summary("Get current humidity level")
@@ -369,15 +369,15 @@ struct GetLocalHumidityIntent: AppIntent {
 }
 
 struct GetWorkshopConditionsIntent: AppIntent {
-    static var title: LocalizedStringResource = "Get Workshop Conditions"
+    static let title: LocalizedStringResource = "Get Workshop Conditions"
 
-    static var description = IntentDescription(
+    static let description = IntentDescription(
         "Retrieves both temperature and humidity from your Cricket environmental sensor in the room, and discloses how recent the reading is.",
         categoryName: "Weather & Environment",
         searchKeywords: ["workshop", "conditions", "temperature", "humidity", "environment", "both"]
     )
 
-    static var openAppWhenRun: Bool = false
+    static let openAppWhenRun: Bool = false
 
     static var parameterSummary: some ParameterSummary {
         Summary("Get temperature and humidity")
@@ -398,15 +398,15 @@ struct GetWorkshopConditionsIntent: AppIntent {
 }
 
 struct GetSensorStatusIntent: AppIntent {
-    static var title: LocalizedStringResource = "Get Sensor Status"
+    static let title: LocalizedStringResource = "Get Sensor Status"
 
-    static var description = IntentDescription(
+    static let description = IntentDescription(
         "Checks the connection and freshness status of your Cricket environmental sensor.",
         categoryName: "Device Status",
         searchKeywords: ["sensor", "status", "connection", "connected", "bluetooth", "BLE", "device status"]
     )
 
-    static var openAppWhenRun: Bool = false
+    static let openAppWhenRun: Bool = false
 
     static var parameterSummary: some ParameterSummary {
         Summary("Check sensor connection status")

@@ -23,7 +23,7 @@ struct CricketAIApp: App {
 
 // Register App Shortcuts with Siri
 struct CricketAppShortcutsProvider: AppShortcutsProvider {
-    static var shortcutTileColor: ShortcutTileColor = .orange
+    static let shortcutTileColor: ShortcutTileColor = .orange
 
     static var appShortcuts: [AppShortcut] {
         AppShortcut(

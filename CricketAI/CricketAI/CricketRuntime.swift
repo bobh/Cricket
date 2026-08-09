@@ -19,13 +19,17 @@ import CricketBLE
 final class CricketRuntime {
     /// The single source of truth the UI and in-process readers observe.
     let core: CricketCore
+    /// The in-process Foundation Models surface. It reads from the same `core` as the UI.
+    let agent: AgentSurface
 
     private let arduino: BluetoothService
     private let ruuvi: RuuviService
 
     init() {
         // Persist to the shared App Group so out-of-process App Intents stay warm.
-        core = CricketCore(persistence: AppGroupReadingStore())
+        let core = CricketCore(persistence: AppGroupReadingStore())
+        self.core = core
+        agent = AgentSurface(core: core)
         arduino = BluetoothService()
         ruuvi = RuuviService()
         arduino.sink = core

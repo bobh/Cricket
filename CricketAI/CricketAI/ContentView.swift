@@ -11,6 +11,20 @@ import SwiftUI
 import CricketCore
 
 struct ContentView: View {
+    var body: some View {
+        TabView {
+            Tab("Conditions", systemImage: "thermometer.medium") {
+                ConditionsView()
+            }
+
+            Tab("Ask Cricket", systemImage: "sparkles") {
+                ChatView()
+            }
+        }
+    }
+}
+
+struct ConditionsView: View {
     @Environment(CricketRuntime.self) private var runtime
     @AppStorage("useFahrenheit") private var useFahrenheit: Bool = false
 
