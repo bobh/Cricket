@@ -1,13 +1,13 @@
 # CricketAI Software Design Document (SDD)
 
 **Document status:** Draft v0.2 — SDK-verified  
-**Date:** 2026-07-13; revised 2026-07-16  
+**Date:** 2026-07-13; revised 2026-08-09
 **Product:** CricketAI  
 **Platform:** iOS 27, iPhone only  
 **Toolchain:** Xcode 27.0 beta 3 (build 27A5218g), iOS 27.0 SDK, Swift 6.4  
 **Source document:** CricketAI SRS draft v0.1, dated 2026-07-12  
 **Design thesis:** local sensor data + local model reasoning = better answers for questions where immediate hyperlocal conditions matter  
-**v0.2 note:** All "confirm against SDK" items resolved against the installed iOS 27.0 SDK on 2026-07-16. See `CricketAI_SDD_Review.md` for the verification record. Changed sections: §8.2, §8.5, §11, §13, §17, §19. Added §8.6 (Spotlight & System Indexing) on 2026-07-23.
+**v0.2 note:** All "confirm against SDK" items resolved against the installed iOS 27.0 SDK. See `CricketAI_SDD_Review.md` for the original verification record. Changed sections: §8.2, §8.5, §11, §13, §17, §19. Added §8.6 (Spotlight & System Indexing) on 2026-07-23. Revised §13, §16, §17, and §19 on 2026-08-09 after confirming the iOS 27 `AppIntentsTesting` and `Evaluations` developer frameworks in the installed Xcode toolchain.
 
 ---
 
@@ -537,17 +537,23 @@ Swift Testing unit tests cover:
 
 ### 13.2 App Intents Tests
 
-There is no dedicated Apple "App Intents testing" framework (confirmed against iOS 27.0 SDK). Intents are tested with Swift Testing by constructing the intent and invoking `perform()` directly (injecting a stubbed `CricketCore`), asserting on the returned result/dialog. Tests verify:
+The iOS 27 SDK includes Apple's `AppIntentsTesting` framework. It runs app intents, entities, enums, and queries out-of-process through the same integration boundary used by Siri and Shortcuts. CricketAI uses `IntentDefinitions` to locate the built app's intent definitions, constructs type-erased `AnyAppIntent` values with controlled parameters, executes them, and inspects `ResolvedIntentResult` values. This is the primary integration test surface for routing, parameter resolution, dialogs, entities, queries, Spotlight exposure, and view annotations.
+
+Fast Swift Testing unit tests may still construct an intent and invoke `perform()` directly with an injected stub `CricketCore`, but those tests do not replace `AppIntentsTesting` coverage of the system boundary. Tests verify:
 
 - each intent performs and returns the expected result type
 - entities resolve (query returns the current reading for known references)
 - dialogs include values and freshness
 - stale dialogs disclose age
 - unavailable dialogs do not fabricate values
+- Siri/Shortcuts-style out-of-process execution resolves the same values as direct invocation
+- view annotations and Spotlight/entity exposure resolve the intended live entity handles
 
 ### 13.3 Agent Evaluations
 
-There is no Apple "evaluation suite" framework (confirmed against iOS 27.0 SDK; Foundation Models exposes only `LanguageModelFeedback`/`logFeedbackAttachment` for Feedback Assistant). CricketAI's evaluations are implemented as an in-repo harness of Swift Testing cases that drive a `LanguageModelSession` and assert on tool-use and disclosure behavior. `LanguageModelFeedback` may optionally be used to capture attachments for triage.
+The iOS 27 SDK includes Apple's `Evaluations` framework, integrated with Swift Testing. CricketAI's Phase-4 harness uses `Evaluation` with a version-controlled prompt dataset and the real `LanguageModelSession` subject. `ToolCallEvaluator` and `TrajectoryExpectation` verify required `ReadEnvironmentalConditions` calls; custom deterministic evaluators verify numeric grounding, freshness disclosure, unavailable handling, and absence of external-source requests. `ModelJudgeEvaluator` may supplement those checks for answer quality, but MUST NOT replace deterministic assertions for the SDD invariants.
+
+`LanguageModelFeedback` / `logFeedbackAttachment` may optionally capture failure artifacts for Feedback Assistant triage; it is diagnostic support, not the evaluation framework.
 
 Evaluation prompts should include:
 
@@ -603,9 +609,9 @@ Migration from CricketIOS is additive:
 |---|---|---|
 | 0 | `CricketCore`, data model, freshness, persistence, tests | Buildable now |
 | 1 | BLE/Ruuvi services feeding `CricketCore` | Buildable now |
-| 2 | App Intents, Entities, on-screen entity association, App Intents tests | ✅ Confirmed (iOS 27.0 SDK) — generic conformance, no schema adoption |
+| 2 | App Intents, Entities, on-screen entity association, App Intents tests | ✅ Confirmed (iOS 27.0 SDK) — generic conformance plus `AppIntentsTesting` system-boundary tests |
 | 3 | Foundation Models `ReadEnvironmentalConditions` tool and chat UI | ✅ Confirmed (iOS 27.0 SDK) — `Tool`, `LanguageModelSession`, `@Generable` |
-| 4 | Evaluation harness for grounding/freshness/tool use | ✅ Confirmed — DIY Swift Testing (no Apple eval framework) |
+| 4 | Evaluation harness for grounding/freshness/tool use | ✅ Confirmed (iOS 27.0 SDK) — Apple `Evaluations` framework integrated with Swift Testing |
 | 5 | PCC escalation and dynamic profiles | ✅ Confirmed (iOS 27.0 SDK) — `PrivateCloudComputeLanguageModel`, `DynamicProfile` |
 
 Phase 0 is listed first because freshness is the foundation for trust. The product emphasis remains the Phase 2/3 loop: local CricketAI readings exposed to Apple Intelligence and local model reasoning.
@@ -614,7 +620,7 @@ Phase 0 is listed first because freshness is the foundation for trust. The produ
 
 ## 17. Open Issues
 
-| ID | Issue | Position (updated 2026-07-16 vs iOS 27.0 SDK) |
+| ID | Issue | Position (updated 2026-08-09 vs iOS 27.0 SDK/toolchain) |
 |---|---|---|
 | SDD-1 | Exact iOS 27 App Intent schema API names | ✅ RESOLVED — macros are `@AssistantEntity(schema:)` / `@AssistantIntent(schema:)`; not adopted in v1 (see SDD-2). |
 | SDD-2 | Whether an environmental schema exists | ✅ RESOLVED — none exists in iOS 27. v1 uses generic `AppEntity`/`AppIntent` (§8.2). |
@@ -623,6 +629,7 @@ Phase 0 is listed first because freshness is the foundation for trust. The produ
 | SDD-5 | PCC routing heuristic | Start simple; tune with evaluations. PCC API confirmed public (§11.2); handle quota/network failure + on-device fallback. |
 | SDD-6 | On-screen entity association ("view annotations") | ✅ RESOLVED — `associateAppEntity(_:priority:)` + `SnippetIntent`/`ShowsSnippetView` confirmed; in scope for v1 (§8.5). |
 | SDD-7 | Background BLE scope | Included in v1 per SRS; implementation risk should be tracked. |
+| SDD-8 | Dedicated App Intents and model-evaluation frameworks | ✅ RESOLVED 2026-08-09 — iOS 27 provides `AppIntentsTesting` and `Evaluations`; both are present in the installed Xcode toolchain and are adopted in §13. |
 
 ---
 
@@ -641,9 +648,9 @@ These are the rules the implementation should not violate:
 
 ---
 
-## 19. API Confirmation Record (verified 2026-07-16 vs iOS 27.0 SDK)
+## 19. API Confirmation Record (updated 2026-08-09 vs iOS 27.0 SDK/toolchain)
 
-All checked against `iPhoneOS27.0.sdk` (Xcode 27.0 beta 3, Swift 6.4). Full record in `CricketAI_SDD_Review.md`.
+Runtime APIs were checked against `iPhoneOS27.0.sdk` (Xcode 27.0 beta 3, Swift 6.4). The 2026-08-09 testing update additionally verified the `Evaluations.framework` and `AppIntentsTesting.framework` Swift interfaces under the installed iPhoneOS developer frameworks. The original review record is in `CricketAI_SDD_Review.md`.
 
 | API area | Status |
 |---|---|
@@ -657,7 +664,8 @@ All checked against `iPhoneOS27.0.sdk` (Xcode 27.0 beta 3, Swift 6.4). Full reco
 | Structured output (`@Generable`, `GeneratedContent`, `GenerationSchema`) | ✅ Present |
 | Private Cloud Compute model (`PrivateCloudComputeLanguageModel`) | ✅ Present (quota/availability/failure types) — §11.2 |
 | Dynamic profile/instructions (`DynamicProfile`, `DynamicInstructions`, `DynamicProfileModifier`) | ✅ Present |
-| Evaluation suite API | ❌ None — evals are DIY Swift Testing; only `LanguageModelFeedback` exists (§13.3) |
+| App Intents Testing (`AppIntentsTesting`, `IntentDefinitions`, `ResolvedIntentResult`) | ✅ Present as an iOS 27 developer testing framework; supports out-of-process Siri/Shortcuts-style verification (§13.2) |
+| Evaluations (`Evaluation`, `ToolCallEvaluator`, `TrajectoryExpectation`, `ModelJudgeEvaluator`) | ✅ Present as an iOS 27 developer testing framework integrated with Swift Testing (§13.3) |
 
 ---
 
@@ -681,4 +689,3 @@ Beyond the present-tense flagships (§10.3), a retrospective capability — e.g.
 
 ### 20.3 Top-level "wife test" verdict (2026-08-08)
 The retrospective / freeform-voice version is **not** deliverable as literally phrased under the current SDD — gated on the four items in §20.2. The scoped present-tense form — *"is it safe in the Orchard Room right now?"* (§10.3, second flagship) — **is** reachable on the planned architecture (live reading + freshness + Phase 2/3 reasoning tool + Phase-4 eval) and is the committed target. It adds only a room/site label and configurable orchid bounds.
-
